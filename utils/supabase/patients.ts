@@ -107,11 +107,13 @@ export async function createPatient(
   const cookieStore = cookies();
   const supabase = createClient(cookieStore);
 
+  // Get user and ensure session is refreshed for RLS
   const {
     data: { user },
+    error: authError,
   } = await supabase.auth.getUser();
 
-  if (!user) {
+  if (authError || !user) {
     throw new Error("Authentication required");
   }
 

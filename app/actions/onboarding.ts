@@ -1,7 +1,8 @@
 "use server";
 
 import { getAuthenticatedUser } from "@/lib/server-actions";
-import { updateDisplayName } from "@/utils/supabase/profile";
+import { updateDisplayName, updateAvatarUrl } from "@/utils/supabase/profile";
+import { uploadAvatar } from "@/utils/supabase/storage";
 import { actionHandler, ActionResult } from "@/lib/errors";
 
 /**
@@ -38,6 +39,36 @@ export async function updateUserDisplayName(
     }
 
     return { success: true };
+  });
+}
+
+/**
+ * Upload and update user avatar
+ */
+export async function uploadUserAvatar(
+  formData: FormData
+): Promise<ActionResult<{ avatarUrl: string }>> {
+  return actionHandler(async () => {
+    const { user } = await getAuthenticatedUser();
+    
+    const file = formData.get("avatar") as File | null;
+    if (!file) {
+      throw new Error("No file provided");
+    }
+
+    // Upload to storage
+    const uploadResult = await uploadAvatar(user.id, file);
+    if (!uploadResult) {
+      throw new Error("Failed to upload avatar");
+    }
+
+    // Update profile with avatar URL
+    const updated = await updateAvatarUrl(user.id, uploadResult.url);
+    if (!updated) {
+      throw new Error("Failed to update avatar URL");
+    }
+
+    return { avatarUrl: uploadResult.url };
   });
 }
 

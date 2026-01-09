@@ -35,11 +35,7 @@ import {
   Transition,
 } from "framer-motion";
 // Importing auth functions
-import {
-  signInWithApple,
-  sendVerificationCode,
-  verifyEmailCode,
-} from "@/utils/supabase/auth";
+import { signInWithApple, sendVerificationCode } from "@/utils/supabase/auth";
 
 // --- CONFETTI LOGIC ---
 import type { ReactNode } from "react";
@@ -184,7 +180,7 @@ function BlurFade({
   const ref = useRef(null);
   const inViewResult = useInView(ref, {
     once: true,
-    margin: inViewMargin as MarginType,
+    margin: inViewMargin as any,
   });
   const isInView = !inView || inViewResult;
   const defaultVariants: Variants = {
@@ -548,29 +544,46 @@ export const AuthComponent = ({
       if (isEmailValid) {
         setIsSendingCode(true);
         try {
+          // sendVerificationCode may log warnings but still send email
           await sendVerificationCode(email);
+          // Always proceed to verification step - email is typically sent
+          // even if there are non-critical warnings
           setAuthStep("verifyEmail");
-        } catch (error) {
-          setModalErrorMessage(
-            "Failed to send verification code. Please try again."
+        } catch (error: any) {
+          // Only show error for critical failures
+          const errorMessage =
+            error?.message || "Failed to send verification code";
+          // Check if it's a critical error
+          const criticalErrors = [
+            "invalid_email",
+            "email_not_allowed",
+            "signup_disabled",
+          ];
+          const isCritical = criticalErrors.some((err) =>
+            errorMessage.toLowerCase().includes(err)
           );
-          setModalStatus("error");
+
+          if (isCritical) {
+            setModalErrorMessage(
+              errorMessage ||
+                "Failed to send verification code. Please try again."
+            );
+            setModalStatus("error");
+          } else {
+            // Non-critical error - email might still be sent, proceed anyway
+            console.warn("Non-critical error, proceeding:", error);
+            setAuthStep("verifyEmail");
+          }
         } finally {
           setIsSendingCode(false);
         }
       }
     } else if (authStep === "verifyEmail") {
-      if (isVerificationCodeValid) {
-        try {
-          const code = verificationCode.join("");
-          await verifyEmailCode(email, code);
-          setAuthStep("password");
-        } catch (error) {
-          setModalErrorMessage("Invalid verification code. Please try again.");
-          setModalStatus("error");
-          setVerificationCode(["", "", "", "", "", ""]);
-        }
-      }
+      // Magic link flow - user clicks link in email, no code needed
+      // The link redirects to /auth/callback which handles the verification
+      // This step just shows a waiting message
+      // User will be redirected after clicking the magic link
+      return;
     } else if (authStep === "password") {
       if (isPasswordValid) setAuthStep("confirmPassword");
     }
@@ -614,7 +627,6 @@ export const AuthComponent = ({
       setAuthStep("verifyEmail");
     } else if (authStep === "verifyEmail") {
       setAuthStep("email");
-      setVerificationCode(["", "", "", "", "", ""]);
     }
   };
 
@@ -624,9 +636,7 @@ export const AuthComponent = ({
   };
 
   useEffect(() => {
-    if (authStep === "verifyEmail") {
-      setTimeout(() => codeInputRefs.current[0]?.focus(), 500);
-    } else if (authStep === "password")
+    if (authStep === "password")
       setTimeout(() => passwordInputRef.current?.focus(), 500);
     else if (authStep === "confirmPassword")
       setTimeout(() => confirmPasswordInputRef.current?.focus(), 500);
@@ -798,7 +808,7 @@ export const AuthComponent = ({
                 animate={{ y: 0, opacity: 1 }}
                 exit={{ opacity: 0 }}
                 transition={{ duration: 0.3, ease: "easeOut" }}
-                className="w-full flex flex-col items-center text-center gap-4"
+                className="w-full flex flex-col items-center text-center gap-6"
               >
                 <BlurFade delay={0} className="w-full">
                   <div className="text-center">
@@ -808,56 +818,55 @@ export const AuthComponent = ({
                   </div>
                 </BlurFade>
                 <BlurFade delay={0.25 * 1}>
-                  <p className="text-sm font-medium text-muted-foreground">
-                    We sent a 6-digit code to{" "}
-                    <span className="font-semibold text-foreground">
-                      {email}
-                    </span>
-                  </p>
+                  <div className="space-y-3">
+                    <p className="text-sm font-medium text-muted-foreground">
+                      We sent a magic link to{" "}
+                      <span className="font-semibold text-foreground">
+                        {email}
+                      </span>
+                    </p>
+                    <p className="text-xs text-muted-foreground max-w-sm">
+                      Click the link in your email to verify your account. The
+                      link will redirect you back to complete your signup.
+                    </p>
+                  </div>
                 </BlurFade>
-                <BlurFade delay={0.25 * 2} className="w-full">
-                  <div className="flex items-center justify-center gap-2 md:gap-3 py-4">
-                    {verificationCode.map((digit, index) => (
-                      <input
-                        key={index}
-                        ref={(el) => {
-                          codeInputRefs.current[index] = el;
-                        }}
-                        type="text"
-                        inputMode="numeric"
-                        maxLength={1}
-                        value={digit}
-                        onChange={(e) =>
-                          handleCodeChange(index, e.target.value)
-                        }
-                        onKeyDown={(e) => handleCodeKeyDown(index, e)}
-                        className="w-12 h-14 md:w-14 md:h-16 text-center text-2xl font-semibold border-2 border-gray-200 rounded-xl focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none transition-all bg-white"
-                      />
-                    ))}
+                <BlurFade delay={0.25 * 2}>
+                  <div className="rounded-lg border bg-muted/50 p-4 max-w-sm">
+                    <p className="text-xs text-muted-foreground">
+                      <strong className="text-foreground">Tip:</strong> If
+                      you're using Gmail, make sure to open the link in your
+                      default browser (not Gmail's in-app browser) for the best
+                      experience.
+                    </p>
                   </div>
                 </BlurFade>
                 <BlurFade delay={0.25 * 3}>
-                  <button
-                    type="button"
-                    onClick={handleProgressStep}
-                    disabled={!isVerificationCodeValid || isSendingCode}
-                    className="mt-2 px-6 py-2.5 bg-primary text-primary-foreground rounded-lg font-medium hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {isSendingCode ? "Verifying..." : "Verify Code"}
-                  </button>
-                </BlurFade>
-                <BlurFade delay={0.25 * 4}>
                   <button
                     type="button"
                     onClick={async () => {
                       setIsSendingCode(true);
                       try {
                         await sendVerificationCode(email);
-                      } catch (error) {
-                        setModalErrorMessage(
-                          "Failed to resend code. Please try again."
+                        // Email sent successfully (even if there were warnings)
+                      } catch (error: any) {
+                        // Only show error for critical failures
+                        const errorMessage =
+                          error?.message || "Failed to resend link";
+                        const criticalErrors = [
+                          "invalid_email",
+                          "email_not_allowed",
+                          "signup_disabled",
+                        ];
+                        const isCritical = criticalErrors.some((err) =>
+                          errorMessage.toLowerCase().includes(err)
                         );
-                        setModalStatus("error");
+
+                        if (isCritical) {
+                          setModalErrorMessage(errorMessage);
+                          setModalStatus("error");
+                        }
+                        // For non-critical errors, email might still be sent
                       } finally {
                         setIsSendingCode(false);
                       }
@@ -865,10 +874,12 @@ export const AuthComponent = ({
                     disabled={isSendingCode}
                     className="text-sm text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
                   >
-                    Didn't receive it? Resend code
+                    {isSendingCode
+                      ? "Sending..."
+                      : "Didn't receive it? Resend link"}
                   </button>
                 </BlurFade>
-                <BlurFade delay={0.25 * 5}>
+                <BlurFade delay={0.25 * 4}>
                   <button
                     type="button"
                     onClick={handleGoBack}

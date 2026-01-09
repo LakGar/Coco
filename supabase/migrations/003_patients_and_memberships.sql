@@ -9,8 +9,10 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 
 -- ============================================
--- PATIENTS TABLE
+-- CREATE ALL TABLES FIRST
 -- ============================================
+
+-- PATIENTS TABLE
 CREATE TABLE IF NOT EXISTS public.patients (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -20,12 +22,66 @@ CREATE TABLE IF NOT EXISTS public.patients (
   created_by UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE
 );
 
--- Index for faster lookups
+-- PATIENT MEMBERSHIPS TABLE
+CREATE TABLE IF NOT EXISTS public.patient_memberships (
+  patient_id UUID NOT NULL REFERENCES public.patients(id) ON DELETE CASCADE,
+  user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  role TEXT NOT NULL CHECK (role IN ('owner', 'caregiver', 'viewer')),
+  status TEXT NOT NULL CHECK (status IN ('accepted', 'pending')),
+  invited_by UUID REFERENCES auth.users(id),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (patient_id, user_id)
+);
+
+-- PATIENT INVITES TABLE
+CREATE TABLE IF NOT EXISTS public.patient_invites (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  patient_id UUID NOT NULL REFERENCES public.patients(id) ON DELETE CASCADE,
+  email TEXT NOT NULL,
+  role TEXT NOT NULL CHECK (role IN ('caregiver', 'viewer')),
+  token_hash TEXT NOT NULL,
+  expires_at TIMESTAMPTZ NOT NULL,
+  created_by UUID NOT NULL REFERENCES auth.users(id),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  accepted_at TIMESTAMPTZ,
+  revoked_at TIMESTAMPTZ
+);
+
+-- ============================================
+-- CREATE INDEXES
+-- ============================================
+
+-- Indexes for patients
 CREATE INDEX IF NOT EXISTS idx_patients_created_by ON public.patients(created_by);
 CREATE INDEX IF NOT EXISTS idx_patients_archived ON public.patients(archived);
 
--- Enable Row Level Security
+-- Indexes for patient_memberships
+CREATE INDEX IF NOT EXISTS idx_patient_memberships_user_id ON public.patient_memberships(user_id);
+CREATE INDEX IF NOT EXISTS idx_patient_memberships_patient_id ON public.patient_memberships(patient_id);
+CREATE INDEX IF NOT EXISTS idx_patient_memberships_status ON public.patient_memberships(status);
+
+-- Indexes for patient_invites
+CREATE INDEX IF NOT EXISTS idx_patient_invites_patient_id ON public.patient_invites(patient_id);
+CREATE INDEX IF NOT EXISTS idx_patient_invites_email ON public.patient_invites(email);
+CREATE INDEX IF NOT EXISTS idx_patient_invites_token_hash ON public.patient_invites(token_hash);
+CREATE INDEX IF NOT EXISTS idx_patient_invites_expires_at ON public.patient_invites(expires_at);
+
+-- ============================================
+-- ENABLE ROW LEVEL SECURITY
+-- ============================================
+
 ALTER TABLE public.patients ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.patient_memberships ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.patient_invites ENABLE ROW LEVEL SECURITY;
+
+-- ============================================
+-- RLS POLICIES FOR PATIENTS
+-- ============================================
+
+-- Drop existing policies if they exist (for idempotency)
+DROP POLICY IF EXISTS "Users can view patients they have accepted membership in" ON public.patients;
+DROP POLICY IF EXISTS "Authenticated users can create patients" ON public.patients;
+DROP POLICY IF EXISTS "Only owners can update patients" ON public.patients;
 
 -- RLS Policy: Users can only select patients they have accepted membership in
 CREATE POLICY "Users can view patients they have accepted membership in"
@@ -61,25 +117,13 @@ CREATE POLICY "Only owners can update patients"
   );
 
 -- ============================================
--- PATIENT MEMBERSHIPS TABLE
+-- RLS POLICIES FOR PATIENT_MEMBERSHIPS
 -- ============================================
-CREATE TABLE IF NOT EXISTS public.patient_memberships (
-  patient_id UUID NOT NULL REFERENCES public.patients(id) ON DELETE CASCADE,
-  user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
-  role TEXT NOT NULL CHECK (role IN ('owner', 'caregiver', 'viewer')),
-  status TEXT NOT NULL CHECK (status IN ('accepted', 'pending')),
-  invited_by UUID REFERENCES auth.users(id),
-  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  PRIMARY KEY (patient_id, user_id)
-);
 
--- Indexes for faster lookups
-CREATE INDEX IF NOT EXISTS idx_patient_memberships_user_id ON public.patient_memberships(user_id);
-CREATE INDEX IF NOT EXISTS idx_patient_memberships_patient_id ON public.patient_memberships(patient_id);
-CREATE INDEX IF NOT EXISTS idx_patient_memberships_status ON public.patient_memberships(status);
-
--- Enable Row Level Security
-ALTER TABLE public.patient_memberships ENABLE ROW LEVEL SECURITY;
+-- Drop existing policies if they exist
+DROP POLICY IF EXISTS "Users can view their own memberships" ON public.patient_memberships;
+DROP POLICY IF EXISTS "Only owners can create memberships" ON public.patient_memberships;
+DROP POLICY IF EXISTS "Owners can update memberships, users can accept their own" ON public.patient_memberships;
 
 -- RLS Policy: Users can view their own memberships
 CREATE POLICY "Users can view their own memberships"
@@ -120,29 +164,13 @@ CREATE POLICY "Owners can update memberships, users can accept their own"
   );
 
 -- ============================================
--- PATIENT INVITES TABLE
+-- RLS POLICIES FOR PATIENT_INVITES
 -- ============================================
-CREATE TABLE IF NOT EXISTS public.patient_invites (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  patient_id UUID NOT NULL REFERENCES public.patients(id) ON DELETE CASCADE,
-  email TEXT NOT NULL,
-  role TEXT NOT NULL CHECK (role IN ('caregiver', 'viewer')),
-  token_hash TEXT NOT NULL,
-  expires_at TIMESTAMPTZ NOT NULL,
-  created_by UUID NOT NULL REFERENCES auth.users(id),
-  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  accepted_at TIMESTAMPTZ,
-  revoked_at TIMESTAMPTZ
-);
 
--- Indexes
-CREATE INDEX IF NOT EXISTS idx_patient_invites_patient_id ON public.patient_invites(patient_id);
-CREATE INDEX IF NOT EXISTS idx_patient_invites_email ON public.patient_invites(email);
-CREATE INDEX IF NOT EXISTS idx_patient_invites_token_hash ON public.patient_invites(token_hash);
-CREATE INDEX IF NOT EXISTS idx_patient_invites_expires_at ON public.patient_invites(expires_at);
-
--- Enable Row Level Security
-ALTER TABLE public.patient_invites ENABLE ROW LEVEL SECURITY;
+-- Drop existing policies if they exist
+DROP POLICY IF EXISTS "Owners can view invites for their patients" ON public.patient_invites;
+DROP POLICY IF EXISTS "Only owners can create invites" ON public.patient_invites;
+DROP POLICY IF EXISTS "Only owners can revoke invites" ON public.patient_invites;
 
 -- RLS Policy: Only owners can view invites for their patients
 CREATE POLICY "Owners can view invites for their patients"
@@ -201,6 +229,7 @@ END;
 $$ LANGUAGE plpgsql;
 
 -- Trigger to auto-update updated_at on patients
+DROP TRIGGER IF EXISTS update_patients_updated_at ON public.patients;
 CREATE TRIGGER update_patients_updated_at
   BEFORE UPDATE ON public.patients
   FOR EACH ROW
@@ -209,6 +238,7 @@ CREATE TRIGGER update_patients_updated_at
 -- ============================================
 -- HELPER FUNCTION: Check if user is owner of patient
 -- ============================================
+
 CREATE OR REPLACE FUNCTION public.is_patient_owner(p_patient_id UUID, p_user_id UUID)
 RETURNS BOOLEAN AS $$
 BEGIN
@@ -221,4 +251,3 @@ BEGIN
   );
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
-

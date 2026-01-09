@@ -92,3 +92,28 @@ export async function updateDisplayName(
   return data;
 }
 
+/**
+ * Update profile avatar URL
+ */
+export async function updateAvatarUrl(
+  userId: string,
+  avatarUrl: string
+): Promise<Profile | null> {
+  const cookieStore = cookies();
+  const supabase = createClient(cookieStore);
+  
+  const { data, error } = await supabase
+    .from("user_profiles")
+    .update({ avatar_url: avatarUrl })
+    .eq("id", userId)
+    .select()
+    .single();
+
+  if (error) {
+    console.error("Error updating avatar URL:", error);
+    return null;
+  }
+
+  return data;
+}
+
