@@ -1,9 +1,9 @@
-import ShaderShowcase from "@/components/ui/hero";
+import Hero from "@/components/landing/hero";
 
 export default function Home() {
   return (
     <div className="min-h-screen h-full w-full">
-      <ShaderShowcase />
+      <Hero />
     </div>
   );
 }

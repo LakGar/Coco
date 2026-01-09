@@ -2,10 +2,11 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import Image from "next/image";
+import { useRouter } from "next/navigation";
 
 export default function Navbar() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-
+  const router = useRouter();
   return (
     <>
       <svg className="absolute inset-0 w-0 h-0">
@@ -88,7 +89,10 @@ export default function Navbar() {
               />
             </svg>
           </button>
-          <button className="px-6 py-2 rounded-full bg-white text-black font-normal text-xs transition-all duration-300 hover:bg-white/90 cursor-pointer h-8 flex items-center z-10">
+          <button
+            className="px-6 py-2 rounded-full bg-white text-black font-normal text-xs transition-all duration-300 hover:bg-white/90 cursor-pointer h-8 flex items-center z-10"
+            onClick={() => router.push("/sign-in")}
+          >
             Get the App
           </button>
         </div>
@@ -162,7 +166,7 @@ export default function Navbar() {
               className="md:hidden fixed inset-0 bg-black z-40"
               onClick={() => setIsMobileMenuOpen(false)}
             />
-            
+
             {/* Mobile Menu Content */}
             <motion.div
               initial={{ y: "-100%" }}

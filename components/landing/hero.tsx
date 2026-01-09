@@ -1,9 +1,10 @@
 "use client";
 import { motion } from "framer-motion";
-import Navbar from "@/components/Navbar";
+import Navbar from "@/components/landing/navbar";
 import Image from "next/image";
+import { SignUpButton } from "@clerk/nextjs";
 
-export default function ShaderShowcase() {
+export default function Hero() {
   return (
     <div className="min-h-screen bg-white relative overflow-visible md:p-6 flex flex-col items-center justify-center">
       {/* Hero Content Container with Image Background */}
@@ -68,11 +69,11 @@ export default function ShaderShowcase() {
                 >
                   Join our community
                 </a>
-                <a
-                  href="#demo"
-                  className="px-6 sm:px-8 py-3 sm:py-3.5 bg-transparent border border-white/40 text-white rounded-full font-normal text-sm sm:text-base text-center hover:bg-white/10 hover:border-white/60 transition-all duration-200"
-                >
-                  Learn more
+
+                <a href="/sign-up">
+                  <button className="px-6 sm:px-8 py-3 sm:py-3.5 bg-transparent border border-white/40 text-white rounded-full font-normal text-sm sm:text-base text-center hover:bg-white/10 hover:border-white/60 transition-all duration-200">
+                    Sign Up
+                  </button>
                 </a>
               </motion.div>
             </div>
