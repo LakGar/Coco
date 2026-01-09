@@ -59,6 +59,35 @@ export const updatePasswordSchema = z.object({
 });
 
 // ============================================
+// PATIENT VALIDATION SCHEMAS
+// ============================================
+
+export const patientFirstNameSchema = z
+  .string()
+  .min(1, "First name is required")
+  .max(100, "First name is too long")
+  .trim();
+
+export const createPatientSchema = z.object({
+  first_name: patientFirstNameSchema,
+  archived: z.boolean().optional().default(false),
+});
+
+export const updatePatientSchema = z.object({
+  first_name: patientFirstNameSchema.optional(),
+  archived: z.boolean().optional(),
+});
+
+export const inviteCaregiverSchema = z.object({
+  email: emailSchema,
+  role: z.enum(["caregiver", "viewer"] as const),
+});
+
+export const acceptInviteSchema = z.object({
+  token: z.string().min(1, "Invite token is required"),
+});
+
+// ============================================
 // UTILITY FUNCTIONS
 // ============================================
 
@@ -74,7 +103,7 @@ export function safeParse<T>(
     return { success: true, data: result.data };
   }
 
-  const firstError = result.error.errors[0];
+  const firstError = result.error.issues[0];
   return {
     success: false,
     error: firstError?.message || "Validation failed",
