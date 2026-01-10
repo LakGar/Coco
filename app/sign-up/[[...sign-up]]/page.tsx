@@ -303,6 +303,8 @@ export default function SignUpPage({
             routing="path"
             path="/sign-up"
             signInUrl="/sign-in"
+            afterSignUpUrl="/onboarding"
+            redirectUrl="/onboarding"
           />
           {/* Sign In Link */}
           <div className="mt-6 text-center">
