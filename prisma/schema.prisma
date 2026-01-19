@@ -1,0 +1,102 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  CAREGIVER
+  FAMILY
+  PHYSICIAN
+  PATIENT
+}
+
+enum TeamRole {
+  CAREGIVER
+  FAMILY
+  PHYSICIAN
+  PATIENT
+}
+
+enum AccessLevel {
+  FULL
+  READ_ONLY
+}
+
+model User {
+  id        String   @id @default(cuid())
+  clerkId   String?  @unique
+  email     String   @unique
+  firstName String?
+  lastName  String?
+  name      String?  // Computed or fallback
+  imageUrl  String?
+  role      UserRole
+  city      String?
+  state     String?
+  onboardingComplete Boolean @default(false)
+
+  // teams the user is a member of
+  teamMemberships CareTeamMember[]
+
+  // teams where this user is the patient
+  patientTeams CareTeam[] @relation("PatientTeams")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model CareTeam {
+  id        String   @id @default(cuid())
+  name      String
+
+  // 1 care team = 1 patient workspace
+  // patientId is optional - patient User is created when they accept invite
+  patientId String?
+  patient   User?    @relation("PatientTeams", fields: [patientId], references: [id])
+
+  members   CareTeamMember[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([patientId])
+}
+
+model CareTeamMember {
+  id          String   @id @default(cuid())
+  teamId      String
+  userId      String?
+
+  // what they are in THIS team (context)
+  teamRole    TeamRole
+
+  // access control (what you asked for)
+  isAdmin     Boolean     @default(false)
+  accessLevel AccessLevel @default(FULL)
+
+  // Invite system
+  inviteCode  String?  @unique
+  inviteEmail String?
+  invitedName String?  // Name of the invited member (before they sign up)
+  invitedAt   DateTime?
+  acceptedAt  DateTime?
+
+  team        CareTeam @relation(fields: [teamId], references: [id])
+  user        User?    @relation(fields: [userId], references: [id])
+
+  joinedAt    DateTime @default(now())
+
+  // prevents duplicate membership (only when user exists)
+  // Note: Using partial unique index for userId to allow multiple nulls
+  @@unique([teamId, userId], name: "team_user_unique")
+  @@index([userId])
+  @@index([teamId])
+  @@index([inviteCode])
+}

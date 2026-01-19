@@ -1,269 +1,231 @@
-import { auth } from "@clerk/nextjs/server";
-import { NextResponse } from "next/server";
-import { getSupabaseAdmin, getSupabaseUserId } from "@/lib/supabase/client";
+import { auth, currentUser } from '@clerk/nextjs/server'
+import { prisma } from '@/lib/prisma'
+import { NextResponse } from 'next/server'
+import { randomBytes } from 'crypto'
+import { sendInviteEmail } from '@/lib/email'
 
 export async function POST(req: Request) {
   try {
-    const { userId: clerkUserId } = await auth();
+    const { userId } = await auth()
 
-    if (!clerkUserId) {
+    if (!userId) {
       return NextResponse.json(
-        { error: "Unauthorized" },
+        { error: 'Unauthorized' },
         { status: 401 }
-      );
+      )
     }
 
-    const body = await req.json();
-    const {
-      displayName,
-      phoneNumber,
-      timezone,
-      notificationPreference,
-      userRole,
-      caringForSomeone,
-      patientName,
-      dementiaStage,
-      whatHelps,
-      whatTriggers,
-      baselineNotes,
-      invites,
-      dailyTrackingItems,
-      morningCheckinTime,
-      eveningCheckinTime,
-      weeklySummaryEnabled,
-      weeklySummaryTime,
-      carePlanWorks,
-      carePlanAvoid,
-      carePlanSteps,
-      selectedGroups,
-      consentAccepted,
-    } = body;
-
-    // Validation
-    if (!displayName || !displayName.trim()) {
+    const clerkUser = await currentUser()
+    if (!clerkUser) {
       return NextResponse.json(
-        { error: "Display name is required" },
-        { status: 400 }
-      );
-    }
-
-    if (!phoneNumber || !phoneNumber.trim()) {
-      return NextResponse.json(
-        { error: "Phone number is required" },
-        { status: 400 }
-      );
-    }
-
-    if (!timezone) {
-      return NextResponse.json(
-        { error: "Timezone is required" },
-        { status: 400 }
-      );
-    }
-
-    if (!consentAccepted) {
-      return NextResponse.json(
-        { error: "Consent is required" },
-        { status: 400 }
-      );
-    }
-
-    // Get Supabase user ID
-    const supabaseUserId = await getSupabaseUserId();
-
-    if (!supabaseUserId) {
-      return NextResponse.json(
-        { error: "User not synced to Supabase. Please try again in a moment." },
+        { error: 'User not found in Clerk' },
         { status: 404 }
-      );
+      )
     }
 
-    const supabase = getSupabaseAdmin();
+    const body = await req.json()
+    const {
+      firstName,
+      lastName,
+      role,
+      city,
+      state,
+      patientName,
+      patientEmail,
+      teamMembers,
+    } = body
 
-    // Update user profile
-    const { error: profileError } = await supabase
-      .from("user_profiles")
-      .update({
-        display_name: displayName.trim(),
-        timezone: timezone,
-      })
-      .eq("user_id", supabaseUserId);
-
-    if (profileError) {
-      console.error("Error updating user profile:", profileError);
+    // Validate required fields
+    if (!firstName || !lastName || !role || !city || !state) {
       return NextResponse.json(
-        { error: "Failed to update profile", details: profileError.message },
-        { status: 500 }
-      );
+        { error: 'Missing required fields' },
+        { status: 400 }
+      )
     }
 
-    // Update user settings with notification preferences and phone
-    const notificationPrefs = {
-      email: notificationPreference === "email" || notificationPreference === "both",
-      text: notificationPreference === "text" || notificationPreference === "both",
-      phone_number: phoneNumber.trim(),
-      daily_tracking_items: dailyTrackingItems || [],
-      morning_checkin_time: morningCheckinTime || "09:00",
-      evening_checkin_time: eveningCheckinTime || "20:00",
-      weekly_summary_enabled: weeklySummaryEnabled || false,
-      weekly_summary_time: weeklySummaryTime || "18:00",
-    };
+    if (!patientName || !patientEmail) {
+      return NextResponse.json(
+        { error: 'Patient information is required' },
+        { status: 400 }
+      )
+    }
 
-    const { error: settingsError } = await supabase
-      .from("user_settings")
-      .update({
-        notification_prefs: notificationPrefs,
+    // Start transaction
+    const result = await prisma.$transaction(async (tx) => {
+      // Get or create current user
+      let user = await tx.user.findUnique({
+        where: { clerkId: userId },
       })
-      .eq("user_id", supabaseUserId);
 
-    if (settingsError) {
-      console.error("Error updating user settings:", settingsError);
-    }
-
-    // Save consent
-    if (consentAccepted) {
-      await supabase.from("user_consents").insert({
-        user_id: supabaseUserId,
-        consent_type: "terms_of_service",
-        consent_version: "1.0",
-        metadata: { user_role: userRole },
-      });
-    }
-
-    // Create patient if user is caring for someone
-    let patientId: string | null = null;
-    if (caringForSomeone === "yes" && patientName) {
-      const { data: patientData, error: patientError } = await supabase
-        .from("patients")
-        .insert({
-          created_by: supabaseUserId,
-          owner_user_id: supabaseUserId,
-          display_name: patientName.trim(),
-          dementia_stage: dementiaStage || null,
-          baseline_notes: [
-            ...(whatHelps || []).map((h: string) => `Helps: ${h}`),
-            ...(whatTriggers || []).map((t: string) => `Triggers: ${t}`),
-            baselineNotes || "",
-          ]
-            .filter(Boolean)
-            .join("\n\n"),
+      if (!user) {
+        // Create user if doesn't exist
+        user = await tx.user.create({
+          data: {
+            clerkId: userId,
+            email: clerkUser.emailAddresses[0]?.emailAddress || '',
+            firstName: clerkUser.firstName || firstName,
+            lastName: clerkUser.lastName || lastName,
+            name: `${firstName} ${lastName}`,
+            role: role,
+            city: city,
+            state: state,
+            onboardingComplete: false,
+          },
         })
-        .select()
-        .single();
-
-      if (patientError) {
-        console.error("Error creating patient:", patientError);
       } else {
-        patientId = patientData.id;
+        // Update user with onboarding data
+        user = await tx.user.update({
+          where: { clerkId: userId },
+          data: {
+            firstName: firstName,
+            lastName: lastName,
+            name: `${firstName} ${lastName}`,
+            role: role,
+            city: city,
+            state: state,
+          },
+        })
+      }
 
-        // Create care plan items
-        const carePlanItems = [
-          ...(carePlanWorks || []).map((text: string, idx: number) => ({
-            patient_id: patientId,
-            category: "works" as const,
-            text: text.trim(),
-            sort_order: idx,
-            created_by: supabaseUserId,
-          })),
-          ...(carePlanAvoid || []).map((text: string, idx: number) => ({
-            patient_id: patientId,
-            category: "avoid" as const,
-            text: text.trim(),
-            sort_order: idx,
-            created_by: supabaseUserId,
-          })),
-          ...(carePlanSteps || []).map((text: string, idx: number) => ({
-            patient_id: patientId,
-            category: "steps" as const,
-            text: text.trim(),
-            sort_order: idx,
-            created_by: supabaseUserId,
-          })),
-        ];
+      // Create care team (patient User will be created when they accept invite)
+      const teamName = `${patientName}'s Care Team`
+      const careTeam = await tx.careTeam.create({
+        data: {
+          name: teamName,
+          // Don't set patientId - it will be set when patient accepts invite
+        },
+      })
 
-        if (carePlanItems.length > 0) {
-          await supabase.from("care_plan_items").insert(carePlanItems);
-        }
+      // Create invite for patient (no User record created yet)
+      const patientInviteCode = randomBytes(16).toString('hex')
+      const patientMember = await tx.careTeamMember.create({
+        data: {
+          teamId: careTeam.id,
+          userId: null, // Will be set when patient accepts invite
+          teamRole: 'PATIENT',
+          isAdmin: false,
+          accessLevel: 'FULL',
+          inviteCode: patientInviteCode,
+          inviteEmail: patientEmail,
+          invitedName: patientName,
+          invitedAt: new Date(),
+        },
+      })
 
-        // Create patient invites
-        if (invites && invites.length > 0) {
-          const inviteItems = invites
-            .filter((inv: any) => inv.email && inv.email.trim())
-            .map((inv: any) => ({
-              patient_id: patientId,
-              invited_email: inv.email.trim(),
-              role: inv.role || "caregiver",
-              token: crypto.randomUUID(),
-              status: "invited" as const,
-              created_by: supabaseUserId,
-            }));
+      // Add current user as team member (admin)
+      await tx.careTeamMember.create({
+        data: {
+          teamId: careTeam.id,
+          userId: user.id,
+          teamRole: role as any,
+          isAdmin: true,
+          accessLevel: 'FULL',
+        },
+      })
 
-          if (inviteItems.length > 0) {
-            await supabase.from("patient_invites").insert(inviteItems);
-          }
-        }
+      // Create invites for team members (no User record created - they'll be created when they accept)
+      const invites = []
+      for (const member of teamMembers || []) {
+        if (!member.email) continue
+
+        const inviteCode = randomBytes(16).toString('hex')
+        // Extract name from email (before @) as a fallback, or use email as name
+        const emailName = member.email.split('@')[0]
+        const invitedName = member.name || emailName || member.email
+        
+        invites.push({
+          email: member.email,
+          inviteCode,
+          name: invitedName,
+          role: member.role,
+        })
+
+        await tx.careTeamMember.create({
+          data: {
+            teamId: careTeam.id,
+            // userId is null until they accept the invite
+            userId: null,
+            teamRole: member.role as any,
+            accessLevel: member.accessLevel as any,
+            inviteCode: inviteCode,
+            inviteEmail: member.email,
+            invitedName: invitedName,
+            invitedAt: new Date(),
+          },
+        })
+      }
+
+      // Mark onboarding as complete
+      await tx.user.update({
+        where: { clerkId: userId },
+        data: {
+          onboardingComplete: true,
+        },
+      })
+
+      return {
+        user,
+        careTeam,
+        patientInviteCode,
+        invites,
+      }
+    })
+
+    // Send invite emails
+    const emailResults = []
+    
+    // Send email to patient
+    try {
+      const patientEmailResult = await sendInviteEmail({
+        to: patientEmail,
+        inviteCode: result.patientInviteCode,
+        inviterName: `${firstName} ${lastName}`,
+        teamName: result.careTeam.name,
+        role: 'PATIENT',
+        isPatient: true,
+      })
+      emailResults.push({ email: patientEmail, success: patientEmailResult.success })
+    } catch (error) {
+      console.error('Error sending patient invite email:', error)
+      emailResults.push({ email: patientEmail, success: false, error: String(error) })
+    }
+
+    // Send emails to team members
+    for (const invite of result.invites) {
+      try {
+        const emailResult = await sendInviteEmail({
+          to: invite.email,
+          inviteCode: invite.inviteCode,
+          inviterName: `${firstName} ${lastName}`,
+          teamName: result.careTeam.name,
+          role: invite.role || 'CAREGIVER',
+          isPatient: false,
+        })
+        emailResults.push({ email: invite.email, success: emailResult.success })
+      } catch (error) {
+        console.error(`Error sending invite email to ${invite.email}:`, error)
+        emailResults.push({ email: invite.email, success: false, error: String(error) })
       }
     }
 
-    // Handle support groups
-    if (selectedGroups && selectedGroups.length > 0) {
-      // For now, we'll create group join requests
-      // In production, you might want to auto-join public groups or create groups
-      for (const groupName of selectedGroups) {
-        // Check if group exists, if not create it
-        const { data: existingGroup } = await supabase
-          .from("groups")
-          .select("id")
-          .eq("name", groupName)
-          .single();
-
-        let groupId: string;
-
-        if (existingGroup) {
-          groupId = existingGroup.id;
-        } else {
-          // Create public group
-          const { data: newGroup, error: groupError } = await supabase
-            .from("groups")
-            .insert({
-              created_by: supabaseUserId,
-              name: groupName,
-              visibility: "public",
-              topic: groupName.toLowerCase().replace(/\s+/g, "_"),
-            })
-            .select()
-            .single();
-
-          if (groupError) {
-            console.error("Error creating group:", groupError);
-            continue;
-          }
-          groupId = newGroup.id;
-        }
-
-        // Add user to group
-        await supabase.from("group_memberships").insert({
-          group_id: groupId,
-          user_id: supabaseUserId,
-          role: "member",
-          status: "active",
-        });
-      }
-    }
+    console.log('Email sending results:', emailResults)
 
     return NextResponse.json({
       success: true,
-      message: "Onboarding completed successfully",
-      patientId,
-    });
+      message: 'Onboarding completed successfully',
+      teamId: result.careTeam.id,
+      emailsSent: emailResults.filter((r) => r.success).length,
+      emailsFailed: emailResults.filter((r) => !r.success).length,
+    })
   } catch (error) {
-    console.error("Error in onboarding API:", error);
+    console.error('Error completing onboarding:', error)
     return NextResponse.json(
       {
-        error: "Internal server error",
+        error: 'Error completing onboarding',
         details: error instanceof Error ? error.message : String(error),
       },
       { status: 500 }
-    );
+    )
   }
 }
+
