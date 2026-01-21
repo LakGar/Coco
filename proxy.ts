@@ -4,7 +4,9 @@ const isProtectedRoute = createRouteMatcher(['/dashboard(.*)', '/forum(.*)', '/o
 const isPublicRoute = createRouteMatcher([
   '/api/webhooks(.*)', 
   '/api/check-onboarding', 
+  '/api/invites(.*)',
   '/onboarding',
+  '/accept-invite(.*)',
   '/sign-in(.*)',
   '/sign-up(.*)',
   '/',

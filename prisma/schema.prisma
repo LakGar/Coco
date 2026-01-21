@@ -29,6 +29,28 @@ enum AccessLevel {
   READ_ONLY
 }
 
+enum TaskPriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+enum TaskStatus {
+  TODO
+  DONE
+  CANCELLED
+  DUE
+}
+
+enum RecurrenceType {
+  DAILY
+  WEEKLY
+  MONTHLY
+  CUSTOM_WEEKDAYS
+  SPECIFIC_DATES
+}
+
 model User {
   id        String   @id @default(cuid())
   clerkId   String?  @unique
@@ -48,6 +70,18 @@ model User {
   // teams where this user is the patient
   patientTeams CareTeam[] @relation("PatientTeams")
 
+  // tasks created by this user
+  createdTasks Task[] @relation("CreatedTasks")
+  
+  // tasks assigned to this user (optional for now)
+  assignedTasks Task[] @relation("AssignedTasks")
+
+  // routines created by this user
+  createdRoutines Routine[] @relation("CreatedRoutines")
+  
+  // routines assigned to this user
+  assignedRoutines Routine[] @relation("AssignedRoutines")
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
@@ -62,6 +96,8 @@ model CareTeam {
   patient   User?    @relation("PatientTeams", fields: [patientId], references: [id])
 
   members   CareTeamMember[]
+  tasks     Task[]
+  routines  Routine[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -99,4 +135,126 @@ model CareTeamMember {
   @@index([userId])
   @@index([teamId])
   @@index([inviteCode])
+}
+
+model Task {
+  id          String      @id @default(cuid())
+  name        String
+  description String?
+  
+  teamId      String
+  team        CareTeam    @relation(fields: [teamId], references: [id])
+  
+  patientName String?     // Patient name for this task
+  
+  createdById String
+  createdBy   User        @relation("CreatedTasks", fields: [createdById], references: [id])
+  
+  assignedToId String?    // Optional assignment (for future use)
+  assignedTo   User?       @relation("AssignedTasks", fields: [assignedToId], references: [id])
+  
+  priority    TaskPriority @default(MEDIUM)
+  status      TaskStatus   @default(TODO)
+  
+  dueDate     DateTime?   // Optional due date and time
+  
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  // Link to routine if this task was generated from a routine
+  routineId      String?
+  routine        Routine? @relation("RoutineTasks", fields: [routineId], references: [id])
+  routineInstanceId String?
+  routineInstance RoutineInstance? @relation("RoutineInstanceTasks", fields: [routineInstanceId], references: [id])
+
+  @@index([teamId])
+  @@index([createdById])
+  @@index([assignedToId])
+  @@index([status])
+  @@index([priority])
+  @@index([routineId])
+  @@index([routineInstanceId])
+}
+
+model Routine {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  
+  teamId      String
+  team        CareTeam @relation(fields: [teamId], references: [id])
+  
+  patientName String?  // Patient name for this routine
+  
+  createdById String
+  createdBy   User     @relation("CreatedRoutines", fields: [createdById], references: [id])
+  
+  assignedToId String? // Optional assignment
+  assignedTo   User?    @relation("AssignedRoutines", fields: [assignedToId], references: [id])
+  
+  priority    TaskPriority @default(MEDIUM)
+  
+  // Recurrence configuration
+  recurrenceType RecurrenceType
+  recurrenceDaysOfWeek Int[] // 0=Sunday, 1=Monday, etc. (for WEEKLY and CUSTOM_WEEKDAYS)
+  recurrenceDayOfMonth Int?  // For MONTHLY (1-31)
+  recurrenceSpecificDates DateTime[] // For SPECIFIC_DATES
+  
+  // Time settings
+  startDate   DateTime
+  endDate     DateTime? // null = repeat indefinitely
+  timeOfDay   String?   // HH:mm format for daily time
+  
+  // Task generation settings
+  autoGenerateTasks Boolean @default(true) // Whether to auto-create tasks
+  generateDaysAhead Int @default(7) // How many days ahead to generate tasks
+  
+  // Journal/Data tracking
+  hasJournalEntry Boolean @default(false) // Whether this routine collects journal data
+  journalPrompts  String[] // Optional prompts/questions for journal entries
+  
+  // Status
+  isActive    Boolean @default(true)
+  
+  // Generated instances and tasks
+  instances  RoutineInstance[]
+  tasks      Task[] @relation("RoutineTasks")
+  
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  
+  @@index([teamId])
+  @@index([createdById])
+  @@index([assignedToId])
+  @@index([isActive])
+  @@index([startDate])
+}
+
+model RoutineInstance {
+  id          String   @id @default(cuid())
+  routineId   String
+  routine     Routine  @relation(fields: [routineId], references: [id])
+  
+  // Scheduled date for this instance
+  scheduledDate DateTime
+  
+  // Completion tracking
+  completedAt DateTime?
+  isCompleted Boolean @default(false)
+  isSkipped   Boolean @default(false)
+  skippedAt   DateTime?
+  
+  // Journal entry data (JSON for flexibility)
+  journalData Json? // Stores structured journal entry data
+  
+  // Link to generated tasks (if auto-generated) - one-to-many since we might generate multiple tasks
+  tasks       Task[] @relation("RoutineInstanceTasks")
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  @@unique([routineId, scheduledDate]) // One instance per routine per date
+  @@index([routineId])
+  @@index([scheduledDate])
+  @@index([isCompleted])
 }

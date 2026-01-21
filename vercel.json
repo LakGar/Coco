@@ -1,0 +1,9 @@
+{
+  "crons": [
+    {
+      "path": "/api/cron/generate-routine-instances",
+      "schedule": "0 0 * * *"
+    }
+  ]
+}
+

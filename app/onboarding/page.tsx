@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -21,6 +21,7 @@ import {
 import { Plus, X, ChevronRight, ChevronLeft, Check, Brain } from 'lucide-react'
 import Image from 'next/image'
 import { toast } from 'sonner'
+import { Spinner } from '@/components/ui/spinner'
 
 type UserRole = 'CAREGIVER' | 'FAMILY' | 'PHYSICIAN' | 'PATIENT'
 type TeamRole = 'CAREGIVER' | 'FAMILY' | 'PHYSICIAN'
@@ -37,6 +38,8 @@ interface TeamMember {
 export default function OnboardingPage() {
   const router = useRouter()
   const [step, setStep] = useState(1)
+  const [isExistingTeamMember, setIsExistingTeamMember] = useState(false)
+  const [checkingTeamStatus, setCheckingTeamStatus] = useState(true)
   const [formData, setFormData] = useState({
     firstName: '',
     lastName: '',
@@ -49,6 +52,24 @@ export default function OnboardingPage() {
   })
 
   const [errors, setErrors] = useState<Record<string, string>>({})
+
+  // Check if user is already a team member (from invite acceptance)
+  useEffect(() => {
+    const checkTeamStatus = async () => {
+      try {
+        const response = await fetch('/api/check-onboarding')
+        if (response.ok) {
+          const data = await response.json()
+          setIsExistingTeamMember(data.isExistingTeamMember || false)
+        }
+        setCheckingTeamStatus(false)
+      } catch (error) {
+        console.error('Error checking team status:', error)
+        setCheckingTeamStatus(false)
+      }
+    }
+    checkTeamStatus()
+  }, [])
 
   const validateStep = (stepNumber: number): boolean => {
     const newErrors: Record<string, string> = {}
@@ -67,7 +88,8 @@ export default function OnboardingPage() {
       if (!formData.state.trim()) newErrors.state = 'State is required'
     }
 
-    if (stepNumber === 4) {
+    // Step 4 validation only if user is creating a new team
+    if (stepNumber === 4 && !isExistingTeamMember) {
       if (!formData.patientName.trim()) newErrors.patientName = 'Patient name is required'
       if (!formData.patientEmail.trim()) newErrors.patientEmail = 'Patient email is required'
       if (formData.patientEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.patientEmail)) {
@@ -119,7 +141,9 @@ export default function OnboardingPage() {
   }
 
   const handleSubmit = async () => {
-    if (!validateStep(4)) return
+    // Validate based on whether user is creating a team or just updating profile
+    const stepToValidate = isExistingTeamMember ? 3 : 4
+    if (!validateStep(stepToValidate)) return
 
     toast.promise(
       fetch('/api/onboarding', {
@@ -133,9 +157,10 @@ export default function OnboardingPage() {
           role: formData.role,
           city: formData.city,
           state: formData.state,
-          patientName: formData.patientName,
-          patientEmail: formData.patientEmail,
-          teamMembers: formData.teamMembers,
+          // Only include patient info if creating a new team
+          patientName: isExistingTeamMember ? undefined : formData.patientName,
+          patientEmail: isExistingTeamMember ? undefined : formData.patientEmail,
+          teamMembers: isExistingTeamMember ? [] : formData.teamMembers,
         }),
       }).then(async (response) => {
         if (!response.ok) {
@@ -151,8 +176,10 @@ export default function OnboardingPage() {
         return data
       }),
       {
-        loading: 'Setting up your care team...',
-        success: 'Onboarding completed! Redirecting to dashboard...',
+        loading: isExistingTeamMember ? 'Updating your profile...' : 'Setting up your care team...',
+        success: isExistingTeamMember 
+          ? 'Profile updated! Redirecting to dashboard...'
+          : 'Onboarding completed! Redirecting to dashboard...',
         error: (error) => error.message || 'Failed to complete onboarding',
       }
     )
@@ -162,7 +189,7 @@ export default function OnboardingPage() {
     { number: 1, title: 'Personal Information', description: 'Tell us about yourself' },
     { number: 2, title: 'Your Role', description: 'What role do you play?' },
     { number: 3, title: 'Location', description: 'Where are you located?' },
-    { number: 4, title: 'Create Team', description: 'Set up your care team' },
+    ...(isExistingTeamMember ? [] : [{ number: 4, title: 'Create Team', description: 'Set up your care team' }]),
   ]
 
   const progress = (step / steps.length) * 100
@@ -470,6 +497,23 @@ export default function OnboardingPage() {
                             </span>
                           </div>
                           <Field>
+                            <FieldLabel>Name (Optional)</FieldLabel>
+                            <FieldContent>
+                              <Input
+                                value={member.name || ''}
+                                onChange={(e) =>
+                                  updateTeamMember(member.id, 'name', e.target.value)
+                                }
+                                placeholder="Team member's name"
+                                className="h-11"
+                              />
+                              <p className="text-xs text-muted-foreground mt-1">
+                                We'll use this to personalize their invite email
+                              </p>
+                            </FieldContent>
+                          </Field>
+
+                          <Field>
                             <FieldLabel>Email Address</FieldLabel>
                             <FieldContent>
                               <Input
@@ -580,14 +624,14 @@ export default function OnboardingPage() {
               <ChevronLeft className="h-4 w-4" />
               Back
             </Button>
-            {step < 4 ? (
+            {step < (isExistingTeamMember ? 3 : 4) ? (
               <Button type="button" onClick={handleNext} className="gap-2" size="lg">
                 Next
                 <ChevronRight className="h-4 w-4" />
               </Button>
             ) : (
               <Button type="button" onClick={handleSubmit} size="lg" className="gap-2">
-                Complete Setup
+                {isExistingTeamMember ? 'Complete Profile' : 'Complete Setup'}
                 <Check className="h-4 w-4" />
               </Button>
             )}

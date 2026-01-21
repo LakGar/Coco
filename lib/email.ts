@@ -14,6 +14,7 @@ export async function sendInviteEmail({
   teamName,
   role,
   isPatient = false,
+  invitedName,
 }: {
   to: string
   inviteCode: string
@@ -21,6 +22,7 @@ export async function sendInviteEmail({
   teamName: string
   role: string
   isPatient?: boolean
+  invitedName?: string
 }) {
   if (!resend) {
     console.log('Email service not configured. Would send invite to:', to)
@@ -42,6 +44,7 @@ export async function sendInviteEmail({
         teamName,
         role,
         isPatient,
+        invitedName,
       }),
     })
 
@@ -63,12 +66,14 @@ function getInviteEmailTemplate({
   teamName,
   role,
   isPatient,
+  invitedName,
 }: {
   inviteUrl: string
   inviterName: string
   teamName: string
   role: string
   isPatient: boolean
+  invitedName?: string
 }) {
   const roleDisplay = role
     .split('_')
@@ -108,6 +113,7 @@ function getInviteEmailTemplate({
               </h2>
               
               <p style="margin: 0 0 20px 0; color: #4a4a4a; font-size: 16px; line-height: 1.6;">
+                ${invitedName ? `Hi ${invitedName},` : 'Hi there,'}<br><br>
                 ${isPatient 
                   ? `Your care team has been set up, and ${inviterName} has invited you to join ${teamName}.`
                   : `${inviterName} has invited you to join ${teamName} as a ${roleDisplay}.`

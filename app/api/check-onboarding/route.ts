@@ -17,6 +17,14 @@ export async function GET() {
       where: { clerkId: userId },
       select: {
         onboardingComplete: true,
+        teamMemberships: {
+          where: {
+            userId: { not: null }, // Only existing memberships
+          },
+          select: {
+            id: true,
+          },
+        },
       },
     })
 
@@ -25,12 +33,14 @@ export async function GET() {
       return NextResponse.json({
         onboardingComplete: false,
         userExists: false,
+        isExistingTeamMember: false,
       })
     }
 
     return NextResponse.json({
       onboardingComplete: user.onboardingComplete,
       userExists: true,
+      isExistingTeamMember: user.teamMemberships.length > 0,
     })
   } catch (error) {
     console.error('Error checking onboarding status:', error)

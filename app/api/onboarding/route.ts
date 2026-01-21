@@ -43,19 +43,25 @@ export async function POST(req: Request) {
       )
     }
 
-    if (!patientName || !patientEmail) {
-      return NextResponse.json(
-        { error: 'Patient information is required' },
-        { status: 400 }
-      )
-    }
+    // Patient info is only required if user is creating a new team
+    // (not if they're already a team member from invite)
 
     // Start transaction
-    const result = await prisma.$transaction(async (tx) => {
+    const result = await prisma.$transaction(async (tx: any) => {
       // Get or create current user
       let user = await tx.user.findUnique({
         where: { clerkId: userId },
+        include: {
+          teamMemberships: {
+            where: {
+              userId: { not: null }, // Only existing memberships
+            },
+          },
+        },
       })
+
+      // Check if user is already part of a team (from invite acceptance)
+      const isExistingTeamMember = user && user.teamMemberships.length > 0
 
       if (!user) {
         // Create user if doesn't exist
@@ -85,6 +91,30 @@ export async function POST(req: Request) {
             state: state,
           },
         })
+      }
+
+      // If user is already a team member (from invite), skip team creation
+      if (isExistingTeamMember) {
+        // Just mark onboarding as complete
+        await tx.user.update({
+          where: { clerkId: userId },
+          data: {
+            onboardingComplete: true,
+          },
+        })
+
+        return {
+          user,
+          careTeam: null,
+          patientInviteCode: null,
+          invites: [],
+          skippedTeamCreation: true,
+        }
+      }
+
+      // Validate patient info is required for new team creation
+      if (!patientName || !patientEmail) {
+        throw new Error('Patient information is required when creating a new care team')
       }
 
       // Create care team (patient User will be created when they accept invite)
@@ -168,40 +198,73 @@ export async function POST(req: Request) {
         careTeam,
         patientInviteCode,
         invites,
+        skippedTeamCreation: false,
       }
     })
 
-    // Send invite emails
+    // If team creation was skipped (user already in a team), just return success
+    if (result.skippedTeamCreation) {
+      return NextResponse.json({
+        success: true,
+        message: 'Profile updated successfully',
+        skippedTeamCreation: true,
+      })
+    }
+
+    // Send invite emails (only if we created a new team)
+    if (!result.careTeam) {
+      return NextResponse.json({
+        success: true,
+        message: 'Profile updated successfully',
+        skippedTeamCreation: true,
+      })
+    }
+
+    // TESTING: Send all invites to lakgarg2002@gmail.com
+    const TEST_EMAIL = 'lakgarg2002@gmail.com'
     const emailResults = []
     
-    // Send email to patient
+    // Send email to patient (testing - send to test email)
     try {
       const patientEmailResult = await sendInviteEmail({
-        to: patientEmail,
+        to: TEST_EMAIL, // Testing: override with test email
         inviteCode: result.patientInviteCode,
         inviterName: `${firstName} ${lastName}`,
         teamName: result.careTeam.name,
         role: 'PATIENT',
         isPatient: true,
       })
-      emailResults.push({ email: patientEmail, success: patientEmailResult.success })
+      emailResults.push({ 
+        email: patientEmail, 
+        actualEmail: TEST_EMAIL,
+        inviteCode: result.patientInviteCode,
+        success: patientEmailResult.success 
+      })
+      console.log(`📧 Patient invite sent to ${TEST_EMAIL} with code: ${result.patientInviteCode}`)
     } catch (error) {
       console.error('Error sending patient invite email:', error)
       emailResults.push({ email: patientEmail, success: false, error: String(error) })
     }
 
-    // Send emails to team members
+    // Send emails to team members (testing - send all to test email)
     for (const invite of result.invites) {
       try {
         const emailResult = await sendInviteEmail({
-          to: invite.email,
+          to: TEST_EMAIL, // Testing: override with test email
           inviteCode: invite.inviteCode,
           inviterName: `${firstName} ${lastName}`,
           teamName: result.careTeam.name,
           role: invite.role || 'CAREGIVER',
           isPatient: false,
+          invitedName: invite.name, // Use the name from the form
         })
-        emailResults.push({ email: invite.email, success: emailResult.success })
+        emailResults.push({ 
+          email: invite.email, 
+          actualEmail: TEST_EMAIL,
+          inviteCode: invite.inviteCode,
+          success: emailResult.success 
+        })
+        console.log(`📧 Team member invite sent to ${TEST_EMAIL} with code: ${invite.inviteCode}`)
       } catch (error) {
         console.error(`Error sending invite email to ${invite.email}:`, error)
         emailResults.push({ email: invite.email, success: false, error: String(error) })
@@ -209,6 +272,39 @@ export async function POST(req: Request) {
     }
 
     console.log('Email sending results:', emailResults)
+    
+    // Collect all invite codes for testing
+    const allInviteCodes: Array<{ code: string; url: string; role: string }> = []
+    
+    // Patient invite
+    if (result.patientInviteCode) {
+      const url = `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/accept-invite?code=${result.patientInviteCode}`
+      allInviteCodes.push({
+        code: result.patientInviteCode,
+        url,
+        role: 'PATIENT',
+      })
+    }
+    
+    // Team member invites
+    result.invites.forEach((invite: { inviteCode: string; role?: string }) => {
+      if (invite.inviteCode) {
+        const url = `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/accept-invite?code=${invite.inviteCode}`
+        allInviteCodes.push({
+          code: invite.inviteCode,
+          url,
+          role: invite.role || 'TEAM_MEMBER',
+        })
+      }
+    })
+    
+    // Log all invite codes for testing
+    console.log('\n📋 TESTING: All invite codes sent to lakgarg2002@gmail.com:')
+    allInviteCodes.forEach((invite) => {
+      console.log(`  - Code: ${invite.code} (${invite.role})`)
+      console.log(`    URL: ${invite.url}`)
+    })
+    console.log('')
 
     return NextResponse.json({
       success: true,
@@ -216,6 +312,8 @@ export async function POST(req: Request) {
       teamId: result.careTeam.id,
       emailsSent: emailResults.filter((r) => r.success).length,
       emailsFailed: emailResults.filter((r) => !r.success).length,
+      // Include invite codes in response for testing
+      inviteCodes: allInviteCodes,
     })
   } catch (error) {
     console.error('Error completing onboarding:', error)
