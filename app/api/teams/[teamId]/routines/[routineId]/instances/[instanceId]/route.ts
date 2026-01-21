@@ -74,64 +74,27 @@ export async function PATCH(
     }
 
     const body = await req.json()
-    const {
-      isCompleted,
-      isSkipped,
-      journalData,
-    } = body
+    const { answers, notes } = body
 
     // Update instance
     const updatedInstance = await prisma.routineInstance.update({
       where: { id: instanceId },
       data: {
-        ...(isCompleted !== undefined && { 
-          isCompleted,
-          completedAt: isCompleted ? new Date() : null,
-        }),
-        ...(isSkipped !== undefined && { 
-          isSkipped,
-          skippedAt: isSkipped ? new Date() : null,
-        }),
-        ...(journalData !== undefined && { journalData }),
+        ...(answers !== undefined && { answers }),
+        ...(notes !== undefined && { notes: notes || null }),
+        filledOutAt: new Date(),
+        filledOutBy: user.id,
       },
       include: {
         routine: {
           select: {
             id: true,
             name: true,
-            hasJournalEntry: true,
-            journalPrompts: true,
-          },
-        },
-        tasks: {
-          include: {
-            assignedTo: {
-              select: {
-                id: true,
-                name: true,
-                firstName: true,
-                lastName: true,
-                email: true,
-                imageUrl: true,
-              },
-            },
+            checklistItems: true,
           },
         },
       },
     })
-
-    // If completing, also mark related tasks as done
-    if (isCompleted && updatedInstance.tasks.length > 0) {
-      await prisma.task.updateMany({
-        where: {
-          routineInstanceId: instanceId,
-          status: { not: 'CANCELLED' },
-        },
-        data: {
-          status: 'DONE',
-        },
-      })
-    }
 
     return NextResponse.json({ instance: updatedInstance })
   } catch (error) {

@@ -1,7 +1,6 @@
 import { auth } from '@clerk/nextjs/server'
 import { prisma } from '@/lib/prisma'
 import { NextResponse } from 'next/server'
-import { TaskPriority, RecurrenceType } from '@prisma/client'
 
 export async function PATCH(
   req: Request,
@@ -67,19 +66,10 @@ export async function PATCH(
       name,
       description,
       patientName,
-      assignedToId,
-      priority,
-      recurrenceType,
+      checklistItems,
       recurrenceDaysOfWeek,
-      recurrenceDayOfMonth,
-      recurrenceSpecificDates,
       startDate,
       endDate,
-      timeOfDay,
-      autoGenerateTasks,
-      generateDaysAhead,
-      hasJournalEntry,
-      journalPrompts,
       isActive,
     } = body
 
@@ -90,35 +80,16 @@ export async function PATCH(
         ...(name !== undefined && { name: name.trim() }),
         ...(description !== undefined && { description: description?.trim() || null }),
         ...(patientName !== undefined && { patientName: patientName || null }),
-        ...(assignedToId !== undefined && { assignedToId: assignedToId || null }),
-        ...(priority && { priority: priority as TaskPriority }),
-        ...(recurrenceType && { recurrenceType: recurrenceType as RecurrenceType }),
-        ...(recurrenceDaysOfWeek !== undefined && { recurrenceDaysOfWeek }),
-        ...(recurrenceDayOfMonth !== undefined && { recurrenceDayOfMonth }),
-        ...(recurrenceSpecificDates !== undefined && { 
-          recurrenceSpecificDates: recurrenceSpecificDates.map((d: string) => new Date(d)) 
+        ...(checklistItems !== undefined && { 
+          checklistItems: checklistItems.map((item: string) => item.trim()).filter((item: string) => item.length > 0)
         }),
+        ...(recurrenceDaysOfWeek !== undefined && { recurrenceDaysOfWeek }),
         ...(startDate !== undefined && { startDate: new Date(startDate) }),
         ...(endDate !== undefined && { endDate: endDate ? new Date(endDate) : null }),
-        ...(timeOfDay !== undefined && { timeOfDay }),
-        ...(autoGenerateTasks !== undefined && { autoGenerateTasks }),
-        ...(generateDaysAhead !== undefined && { generateDaysAhead }),
-        ...(hasJournalEntry !== undefined && { hasJournalEntry }),
-        ...(journalPrompts !== undefined && { journalPrompts }),
         ...(isActive !== undefined && { isActive }),
       },
       include: {
         createdBy: {
-          select: {
-            id: true,
-            name: true,
-            firstName: true,
-            lastName: true,
-            email: true,
-            imageUrl: true,
-          },
-        },
-        assignedTo: {
           select: {
             id: true,
             name: true,

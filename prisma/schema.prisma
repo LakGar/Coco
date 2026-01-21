@@ -43,6 +43,23 @@ enum TaskStatus {
   DUE
 }
 
+enum MoodRating {
+  // Positive / Neutral
+  CALM
+  CONTENT
+  NEUTRAL
+  RELAXED
+  // Low / Withdrawn
+  SAD
+  WITHDRAWN
+  TIRED
+  // Agitated / Challenging
+  ANXIOUS
+  IRRITABLE
+  RESTLESS
+  CONFUSED
+}
+
 enum RecurrenceType {
   DAILY
   WEEKLY
@@ -52,17 +69,17 @@ enum RecurrenceType {
 }
 
 model User {
-  id        String   @id @default(cuid())
-  clerkId   String?  @unique
-  email     String   @unique
-  firstName String?
-  lastName  String?
-  name      String?  // Computed or fallback
-  imageUrl  String?
-  role      UserRole
-  city      String?
-  state     String?
-  onboardingComplete Boolean @default(false)
+  id                 String   @id @default(cuid())
+  clerkId            String?  @unique
+  email              String   @unique
+  firstName          String?
+  lastName           String?
+  name               String? // Computed or fallback
+  imageUrl           String?
+  role               UserRole
+  city               String?
+  state              String?
+  onboardingComplete Boolean  @default(false)
 
   // teams the user is a member of
   teamMemberships CareTeamMember[]
@@ -72,32 +89,33 @@ model User {
 
   // tasks created by this user
   createdTasks Task[] @relation("CreatedTasks")
-  
+
   // tasks assigned to this user (optional for now)
   assignedTasks Task[] @relation("AssignedTasks")
 
   // routines created by this user
   createdRoutines Routine[] @relation("CreatedRoutines")
-  
-  // routines assigned to this user
-  assignedRoutines Routine[] @relation("AssignedRoutines")
+
+  // moods logged by this user
+  loggedMoods Mood[] @relation("LoggedMoods")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
 
 model CareTeam {
-  id        String   @id @default(cuid())
-  name      String
+  id   String @id @default(cuid())
+  name String
 
   // 1 care team = 1 patient workspace
   // patientId is optional - patient User is created when they accept invite
   patientId String?
-  patient   User?    @relation("PatientTeams", fields: [patientId], references: [id])
+  patient   User?   @relation("PatientTeams", fields: [patientId], references: [id])
 
-  members   CareTeamMember[]
-  tasks     Task[]
-  routines  Routine[]
+  members  CareTeamMember[]
+  tasks    Task[]
+  routines Routine[]
+  moods    Mood[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -106,28 +124,28 @@ model CareTeam {
 }
 
 model CareTeamMember {
-  id          String   @id @default(cuid())
-  teamId      String
-  userId      String?
+  id     String  @id @default(cuid())
+  teamId String
+  userId String?
 
   // what they are in THIS team (context)
-  teamRole    TeamRole
+  teamRole TeamRole
 
   // access control (what you asked for)
   isAdmin     Boolean     @default(false)
   accessLevel AccessLevel @default(FULL)
 
   // Invite system
-  inviteCode  String?  @unique
+  inviteCode  String?   @unique
   inviteEmail String?
-  invitedName String?  // Name of the invited member (before they sign up)
+  invitedName String? // Name of the invited member (before they sign up)
   invitedAt   DateTime?
   acceptedAt  DateTime?
 
-  team        CareTeam @relation(fields: [teamId], references: [id])
-  user        User?    @relation(fields: [userId], references: [id])
+  team CareTeam @relation(fields: [teamId], references: [id])
+  user User?    @relation(fields: [userId], references: [id])
 
-  joinedAt    DateTime @default(now())
+  joinedAt DateTime @default(now())
 
   // prevents duplicate membership (only when user exists)
   // Note: Using partial unique index for userId to allow multiple nulls
@@ -138,123 +156,126 @@ model CareTeamMember {
 }
 
 model Task {
-  id          String      @id @default(cuid())
+  id          String  @id @default(cuid())
   name        String
   description String?
-  
-  teamId      String
-  team        CareTeam    @relation(fields: [teamId], references: [id])
-  
-  patientName String?     // Patient name for this task
-  
-  createdById String
-  createdBy   User        @relation("CreatedTasks", fields: [createdById], references: [id])
-  
-  assignedToId String?    // Optional assignment (for future use)
-  assignedTo   User?       @relation("AssignedTasks", fields: [assignedToId], references: [id])
-  
-  priority    TaskPriority @default(MEDIUM)
-  status      TaskStatus   @default(TODO)
-  
-  dueDate     DateTime?   // Optional due date and time
-  
-  createdAt   DateTime    @default(now())
-  updatedAt   DateTime    @updatedAt
 
-  // Link to routine if this task was generated from a routine
-  routineId      String?
-  routine        Routine? @relation("RoutineTasks", fields: [routineId], references: [id])
-  routineInstanceId String?
-  routineInstance RoutineInstance? @relation("RoutineInstanceTasks", fields: [routineInstanceId], references: [id])
+  teamId String
+  team   CareTeam @relation(fields: [teamId], references: [id])
+
+  patientName String? // Patient name for this task
+
+  createdById String
+  createdBy   User   @relation("CreatedTasks", fields: [createdById], references: [id])
+
+  assignedToId String? // Optional assignment (for future use)
+  assignedTo   User?   @relation("AssignedTasks", fields: [assignedToId], references: [id])
+
+  priority TaskPriority @default(MEDIUM)
+  status   TaskStatus   @default(TODO)
+
+  dueDate DateTime? // Optional due date and time
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Note: Tasks are now separate from routines - routines are journal checklists only
 
   @@index([teamId])
   @@index([createdById])
   @@index([assignedToId])
   @@index([status])
   @@index([priority])
-  @@index([routineId])
-  @@index([routineInstanceId])
 }
 
 model Routine {
-  id          String   @id @default(cuid())
+  id          String  @id @default(cuid())
   name        String
   description String?
-  
-  teamId      String
-  team        CareTeam @relation(fields: [teamId], references: [id])
-  
-  patientName String?  // Patient name for this routine
-  
+
+  teamId String
+  team   CareTeam @relation(fields: [teamId], references: [id])
+
+  patientName String? // Patient name for this routine
+
   createdById String
-  createdBy   User     @relation("CreatedRoutines", fields: [createdById], references: [id])
-  
-  assignedToId String? // Optional assignment
-  assignedTo   User?    @relation("AssignedRoutines", fields: [assignedToId], references: [id])
-  
-  priority    TaskPriority @default(MEDIUM)
-  
-  // Recurrence configuration
-  recurrenceType RecurrenceType
-  recurrenceDaysOfWeek Int[] // 0=Sunday, 1=Monday, etc. (for WEEKLY and CUSTOM_WEEKDAYS)
-  recurrenceDayOfMonth Int?  // For MONTHLY (1-31)
-  recurrenceSpecificDates DateTime[] // For SPECIFIC_DATES
-  
+  createdBy   User   @relation("CreatedRoutines", fields: [createdById], references: [id])
+
+  // Checklist items (Yes/No questions) - e.g., ["Did you take your medication?", "Did you exercise?"]
+  checklistItems String[] // Array of questions/prompts
+
+  // Recurrence - simplified to just days of week
+  recurrenceDaysOfWeek Int[] // [0,1,2,3,4,5,6] for daily, [1,3,5] for MWF, etc. (0=Sunday)
+
   // Time settings
-  startDate   DateTime
-  endDate     DateTime? // null = repeat indefinitely
-  timeOfDay   String?   // HH:mm format for daily time
-  
-  // Task generation settings
-  autoGenerateTasks Boolean @default(true) // Whether to auto-create tasks
-  generateDaysAhead Int @default(7) // How many days ahead to generate tasks
-  
-  // Journal/Data tracking
-  hasJournalEntry Boolean @default(false) // Whether this routine collects journal data
-  journalPrompts  String[] // Optional prompts/questions for journal entries
-  
+  startDate DateTime
+  endDate   DateTime? // null = repeat indefinitely (can set for a month)
+
   // Status
-  isActive    Boolean @default(true)
-  
-  // Generated instances and tasks
-  instances  RoutineInstance[]
-  tasks      Task[] @relation("RoutineTasks")
-  
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
-  
+  isActive Boolean @default(true)
+
+  // Journal instances
+  instances RoutineInstance[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   @@index([teamId])
   @@index([createdById])
-  @@index([assignedToId])
   @@index([isActive])
   @@index([startDate])
 }
 
 model RoutineInstance {
-  id          String   @id @default(cuid())
-  routineId   String
-  routine     Routine  @relation(fields: [routineId], references: [id])
-  
-  // Scheduled date for this instance
-  scheduledDate DateTime
-  
-  // Completion tracking
-  completedAt DateTime?
-  isCompleted Boolean @default(false)
-  isSkipped   Boolean @default(false)
-  skippedAt   DateTime?
-  
-  // Journal entry data (JSON for flexibility)
-  journalData Json? // Stores structured journal entry data
-  
-  // Link to generated tasks (if auto-generated) - one-to-many since we might generate multiple tasks
-  tasks       Task[] @relation("RoutineInstanceTasks")
-  
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  
-  @@unique([routineId, scheduledDate]) // One instance per routine per date
+  id        String  @id @default(cuid())
+  routineId String
+  routine   Routine @relation(fields: [routineId], references: [id])
+
+  // Date this journal entry is for
+  entryDate DateTime // The day this journal entry is about
+
+  // Yes/No answers - stored as JSON: { "Did you take medication?": true, "Did you exercise?": false }
+  answers Json? // Map of question -> boolean (Yes/No)
+
+  // Optional notes/observations
+  notes String?
+
+  // When was this filled out
+  filledOutAt DateTime @default(now())
+  filledOutBy String? // userId who filled it out
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([routineId, entryDate]) // One entry per routine per day
   @@index([routineId])
-  @@index([scheduledDate])
-  @@index([isCompleted])
+  @@index([entryDate])
+  @@index([filledOutAt])
+}
+
+model Mood {
+  id     String   @id @default(cuid())
+  teamId String
+  team   CareTeam @relation(fields: [teamId], references: [id])
+
+  // Who logged this mood entry
+  loggedById String
+  loggedBy   User   @relation("LoggedMoods", fields: [loggedById], references: [id])
+
+  // Mood rating (1-5 scale)
+  rating MoodRating
+
+  // Optional notes/context
+  notes String?
+
+  // When this mood was observed/logged
+  observedAt DateTime @default(now())
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([teamId])
+  @@index([loggedById])
+  @@index([observedAt])
+  @@index([rating])
 }

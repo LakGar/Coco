@@ -65,26 +65,15 @@ export async function GET(
             imageUrl: true,
           },
         },
-        assignedTo: {
-          select: {
-            id: true,
-            name: true,
-            firstName: true,
-            lastName: true,
-            email: true,
-            imageUrl: true,
-          },
-        },
         instances: {
           orderBy: {
-            scheduledDate: 'desc',
+            createdAt: 'desc', // Using createdAt until schema is migrated to entryDate
           },
           take: 30, // Get recent instances
         },
         _count: {
           select: {
             instances: true,
-            tasks: true,
           },
         },
       },
@@ -178,19 +167,10 @@ export async function POST(
       name,
       description,
       patientName,
-      assignedToId,
-      priority,
-      recurrenceType,
-      recurrenceDaysOfWeek,
-      recurrenceDayOfMonth,
-      recurrenceSpecificDates,
+      checklistItems, // Array of Yes/No questions
+      recurrenceDaysOfWeek, // [0,1,2,3,4,5,6] for daily, etc.
       startDate,
       endDate,
-      timeOfDay,
-      autoGenerateTasks,
-      generateDaysAhead,
-      hasJournalEntry,
-      journalPrompts,
     } = body
 
     // Validate required fields
@@ -201,9 +181,16 @@ export async function POST(
       )
     }
 
-    if (!recurrenceType || !['DAILY', 'WEEKLY', 'MONTHLY', 'CUSTOM_WEEKDAYS', 'SPECIFIC_DATES'].includes(recurrenceType)) {
+    if (!checklistItems || !Array.isArray(checklistItems) || checklistItems.length === 0) {
       return NextResponse.json(
-        { error: 'Valid recurrence type is required' },
+        { error: 'At least one checklist item (question) is required' },
+        { status: 400 }
+      )
+    }
+
+    if (!recurrenceDaysOfWeek || !Array.isArray(recurrenceDaysOfWeek) || recurrenceDaysOfWeek.length === 0) {
+      return NextResponse.json(
+        { error: 'At least one day of week is required' },
         { status: 400 }
       )
     }
@@ -211,30 +198,6 @@ export async function POST(
     if (!startDate) {
       return NextResponse.json(
         { error: 'Start date is required' },
-        { status: 400 }
-      )
-    }
-
-    // Validate recurrence-specific fields
-    if (recurrenceType === 'WEEKLY' || recurrenceType === 'CUSTOM_WEEKDAYS') {
-      if (!recurrenceDaysOfWeek || recurrenceDaysOfWeek.length === 0) {
-        return NextResponse.json(
-          { error: 'Days of week are required for weekly/custom recurrence' },
-          { status: 400 }
-        )
-      }
-    }
-
-    if (recurrenceType === 'MONTHLY' && !recurrenceDayOfMonth) {
-      return NextResponse.json(
-        { error: 'Day of month is required for monthly recurrence' },
-        { status: 400 }
-      )
-    }
-
-    if (recurrenceType === 'SPECIFIC_DATES' && (!recurrenceSpecificDates || recurrenceSpecificDates.length === 0)) {
-      return NextResponse.json(
-        { error: 'Specific dates are required for specific dates recurrence' },
         { status: 400 }
       )
     }
@@ -274,32 +237,14 @@ export async function POST(
         teamId: teamId,
         patientName: finalPatientName,
         createdById: user.id,
-        assignedToId: assignedToId || null,
-        priority: (priority as TaskPriority) || 'MEDIUM',
-        recurrenceType: recurrenceType as RecurrenceType,
-        recurrenceDaysOfWeek: recurrenceDaysOfWeek || [],
-        recurrenceDayOfMonth: recurrenceDayOfMonth || null,
-        recurrenceSpecificDates: recurrenceSpecificDates ? recurrenceSpecificDates.map((d: string) => new Date(d)) : [],
+        checklistItems: checklistItems.map((item: string) => item.trim()).filter((item: string) => item.length > 0),
+        recurrenceDaysOfWeek: recurrenceDaysOfWeek,
         startDate: new Date(startDate),
         endDate: endDate ? new Date(endDate) : null,
-        timeOfDay: timeOfDay || null,
-        autoGenerateTasks: autoGenerateTasks !== undefined ? autoGenerateTasks : true,
-        generateDaysAhead: generateDaysAhead || 7,
-        hasJournalEntry: hasJournalEntry || false,
-        journalPrompts: journalPrompts || [],
+        isActive: true,
       },
       include: {
         createdBy: {
-          select: {
-            id: true,
-            name: true,
-            firstName: true,
-            lastName: true,
-            email: true,
-            imageUrl: true,
-          },
-        },
-        assignedTo: {
           select: {
             id: true,
             name: true,

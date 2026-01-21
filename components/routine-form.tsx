@@ -1,47 +1,31 @@
 "use client"
 
 import * as React from "react"
+import { motion, useReducedMotion } from "framer-motion"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Field, FieldContent, FieldGroup, FieldLabel } from "@/components/ui/field"
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetFooter,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet"
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import { Checkbox } from "@/components/ui/checkbox"
 import { toast } from "sonner"
-import { Trash2 } from "lucide-react"
+import { Trash2, Plus, X, Check } from "lucide-react"
+import { ROUTINE_PRESETS, PRESET_CATEGORIES, getAllPresets, type PresetItem } from "@/lib/routine-presets"
 
 interface Routine {
   id?: string
   name: string
   description?: string | null
-  patientName?: string | null
-  assignedToId?: string | null
-  priority: "LOW" | "MEDIUM" | "HIGH" | "URGENT"
-  recurrenceType: "DAILY" | "WEEKLY" | "MONTHLY" | "CUSTOM_WEEKDAYS" | "SPECIFIC_DATES"
-  recurrenceDaysOfWeek?: number[]
-  recurrenceDayOfMonth?: number | null
-  recurrenceSpecificDates?: string[]
+  checklistItems: string[]
+  recurrenceDaysOfWeek: number[]
   startDate: string
   endDate?: string | null
-  timeOfDay?: string | null
-  autoGenerateTasks?: boolean
-  generateDaysAhead?: number
-  hasJournalEntry?: boolean
-  journalPrompts?: string[]
   isActive?: boolean
 }
 
@@ -61,13 +45,13 @@ interface RoutineFormProps {
 }
 
 const WEEKDAYS = [
-  { value: 0, label: "Sunday" },
-  { value: 1, label: "Monday" },
-  { value: 2, label: "Tuesday" },
-  { value: 3, label: "Wednesday" },
-  { value: 4, label: "Thursday" },
-  { value: 5, label: "Friday" },
-  { value: 6, label: "Saturday" },
+  { value: 0, label: "Sun" },
+  { value: 1, label: "Mon" },
+  { value: 2, label: "Tue" },
+  { value: 3, label: "Wed" },
+  { value: 4, label: "Thu" },
+  { value: 5, label: "Fri" },
+  { value: 6, label: "Sat" },
 ]
 
 export function RoutineForm({
@@ -83,25 +67,17 @@ export function RoutineForm({
   const [loading, setLoading] = React.useState(false)
   const [formData, setFormData] = React.useState({
     name: "",
-    description: "",
-    patientName: patientName || "",
-    assignedToId: "",
-    priority: "MEDIUM" as "LOW" | "MEDIUM" | "HIGH" | "URGENT",
-    recurrenceType: "DAILY" as "DAILY" | "WEEKLY" | "MONTHLY" | "CUSTOM_WEEKDAYS" | "SPECIFIC_DATES",
-    recurrenceDaysOfWeek: [] as number[],
-    recurrenceDayOfMonth: null as number | null,
-    recurrenceSpecificDates: [] as string[],
+    checklistItems: [] as string[],
+    recurrenceDaysOfWeek: [0, 1, 2, 3, 4, 5, 6] as number[], // Default to daily
     startDate: "",
     endDate: "",
-    timeOfDay: "",
-    autoGenerateTasks: true,
-    generateDaysAhead: 7,
-    hasJournalEntry: false,
-    journalPrompts: [] as string[],
     isActive: true,
   })
+  const [newQuestion, setNewQuestion] = React.useState("")
+  const [showPresets, setShowPresets] = React.useState(false)
 
-  const [newPrompt, setNewPrompt] = React.useState("")
+  const shouldReduceMotion = useReducedMotion()
+  const shouldAnimate = !shouldReduceMotion
 
   // Reset form when routine changes or sheet opens/closes
   React.useEffect(() => {
@@ -110,74 +86,54 @@ export function RoutineForm({
         // Edit mode
         setFormData({
           name: routine.name || "",
-          description: routine.description || "",
-          patientName: routine.patientName || patientName || "",
-          assignedToId: routine.assignedToId || "",
-          priority: routine.priority || "MEDIUM",
-          recurrenceType: routine.recurrenceType || "DAILY",
-          recurrenceDaysOfWeek: routine.recurrenceDaysOfWeek || [],
-          recurrenceDayOfMonth: routine.recurrenceDayOfMonth || null,
-          recurrenceSpecificDates: routine.recurrenceSpecificDates || [],
+          checklistItems: routine.checklistItems || [],
+          recurrenceDaysOfWeek: routine.recurrenceDaysOfWeek || [0, 1, 2, 3, 4, 5, 6],
           startDate: routine.startDate ? new Date(routine.startDate).toISOString().split("T")[0] : "",
           endDate: routine.endDate ? new Date(routine.endDate).toISOString().split("T")[0] : "",
-          timeOfDay: routine.timeOfDay || "",
-          autoGenerateTasks: routine.autoGenerateTasks !== undefined ? routine.autoGenerateTasks : true,
-          generateDaysAhead: routine.generateDaysAhead || 7,
-          hasJournalEntry: routine.hasJournalEntry || false,
-          journalPrompts: routine.journalPrompts || [],
           isActive: routine.isActive !== undefined ? routine.isActive : true,
         })
       } else {
-        // Create mode
-        const tomorrow = new Date()
-        tomorrow.setDate(tomorrow.getDate() + 1)
+        // Create mode - default to today, daily, indefinite
+        const today = new Date()
         setFormData({
           name: "",
-          description: "",
-          patientName: patientName || "",
-          assignedToId: "",
-          priority: "MEDIUM",
-          recurrenceType: "DAILY",
-          recurrenceDaysOfWeek: [],
-          recurrenceDayOfMonth: null,
-          recurrenceSpecificDates: [],
-          startDate: tomorrow.toISOString().split("T")[0],
-          endDate: "",
-          timeOfDay: "",
-          autoGenerateTasks: true,
-          generateDaysAhead: 7,
-          hasJournalEntry: false,
-          journalPrompts: [],
+          checklistItems: [],
+          recurrenceDaysOfWeek: [0, 1, 2, 3, 4, 5, 6], // Daily by default (all days)
+          startDate: today.toISOString().split("T")[0],
+          endDate: "", // No end date = indefinite
           isActive: true,
         })
       }
-      setNewPrompt("")
+      setNewQuestion("")
+      setShowPresets(false)
     }
-  }, [open, routine, patientName])
+  }, [open, routine])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
 
     try {
+      if (formData.checklistItems.length === 0) {
+        toast.error("Please add at least one question to the checklist")
+        setLoading(false)
+        return
+      }
+
+      if (formData.recurrenceDaysOfWeek.length === 0) {
+        toast.error("Please select at least one day of the week")
+        setLoading(false)
+        return
+      }
+
       const payload = {
         name: formData.name.trim(),
-        description: formData.description.trim() || null,
-        patientName: formData.patientName.trim() || null,
-        assignedToId: formData.assignedToId || null,
-        priority: formData.priority,
-        recurrenceType: formData.recurrenceType,
+        description: null, // No description field
+        patientName: patientName || null,
+        checklistItems: formData.checklistItems,
         recurrenceDaysOfWeek: formData.recurrenceDaysOfWeek,
-        recurrenceDayOfMonth: formData.recurrenceDayOfMonth,
-        recurrenceSpecificDates: formData.recurrenceSpecificDates,
-        startDate: new Date(formData.startDate).toISOString(),
-        endDate: formData.endDate ? new Date(formData.endDate).toISOString() : null,
-        timeOfDay: formData.timeOfDay || null,
-        autoGenerateTasks: formData.autoGenerateTasks,
-        generateDaysAhead: formData.generateDaysAhead,
-        hasJournalEntry: formData.hasJournalEntry,
-        journalPrompts: formData.journalPrompts,
-        isActive: formData.isActive,
+        startDate: formData.startDate,
+        endDate: formData.endDate || null,
       }
 
       const url = routine
@@ -230,426 +186,464 @@ export function RoutineForm({
       ...prev,
       recurrenceDaysOfWeek: prev.recurrenceDaysOfWeek.includes(day)
         ? prev.recurrenceDaysOfWeek.filter(d => d !== day)
-        : [...prev.recurrenceDaysOfWeek, day],
+        : [...prev.recurrenceDaysOfWeek, day].sort(),
     }))
   }
 
-  const addJournalPrompt = () => {
-    if (newPrompt.trim()) {
+  const addQuestion = (question?: string) => {
+    const questionToAdd = question || newQuestion.trim()
+    if (questionToAdd && !formData.checklistItems.includes(questionToAdd)) {
       setFormData(prev => ({
         ...prev,
-        journalPrompts: [...prev.journalPrompts, newPrompt.trim()],
+        checklistItems: [...prev.checklistItems, questionToAdd],
       }))
-      setNewPrompt("")
+      if (!question) {
+        setNewQuestion("")
+      }
+      // Don't close presets - keep them visible
     }
   }
 
-  const removeJournalPrompt = (index: number) => {
+  // Helper function to get readable day selection
+  const getDaySelectionLabel = () => {
+    const days = formData.recurrenceDaysOfWeek.sort()
+    if (days.length === 0) return "No days selected"
+    if (days.length === 7) return "Every day"
+    
+    // Check for weekdays (Mon-Fri = 1-5)
+    if (days.length === 5 && days.every(d => [1, 2, 3, 4, 5].includes(d))) {
+      return "Weekdays (Mon-Fri)"
+    }
+    
+    // Check for weekends (Sat-Sun = 6, 0)
+    if (days.length === 2 && days.includes(0) && days.includes(6)) {
+      return "Weekends (Sat-Sun)"
+    }
+    
+    // Otherwise, list the days
+    const dayNames = days.map(d => WEEKDAYS.find(w => w.value === d)?.label).filter(Boolean)
+    return dayNames.join(", ")
+  }
+
+  const removeQuestion = (index: number) => {
     setFormData(prev => ({
       ...prev,
-      journalPrompts: prev.journalPrompts.filter((_, i) => i !== index),
+      checklistItems: prev.checklistItems.filter((_, i) => i !== index),
     }))
   }
 
+  const allPresets = getAllPresets()
+
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent className="sm:max-w-lg flex flex-col h-full p-0">
-        <SheetHeader className="px-6 pt-6 pb-4 shrink-0 border-b">
-          <SheetTitle>{routine ? "Edit Routine" : "Create New Routine"}</SheetTitle>
-          <SheetDescription>
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-[98vw] w-[98vw] max-h-[98vh] h-[98vh] flex flex-col p-0 m-0 translate-x-[-50%] translate-y-[-50%] left-1/2 top-1/2 rounded-lg">
+        <DialogHeader className="px-6 pt-6 pb-4 shrink-0 border-b">
+          <DialogTitle className="text-2xl">{routine ? "Edit Routine" : "Create Daily Journal Routine"}</DialogTitle>
+          <DialogDescription className="text-base">
             {routine
               ? "Update the routine details below."
-              : "Create a recurring routine with optional journal tracking."}
-          </SheetDescription>
-        </SheetHeader>
+              : "Create a daily journal routine with Yes/No questions. Same questions every day."}
+          </DialogDescription>
+        </DialogHeader>
 
         <form onSubmit={handleSubmit} className="flex-1 flex flex-col min-h-0">
           <div className="flex-1 overflow-y-auto px-6 py-4">
-          <FieldGroup>
-            <Field>
-              <FieldLabel>
-                Routine Name <span className="text-destructive">*</span>
-              </FieldLabel>
-              <FieldContent>
-                <Input
-                  value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  placeholder="Enter routine name"
-                  required
-                />
-              </FieldContent>
-            </Field>
-
-            {/* <Field>
-              <FieldLabel>Description</FieldLabel>
-              <FieldContent>
-                <textarea
-                  value={formData.description}
-                  onChange={(e) =>
-                    setFormData({ ...formData, description: e.target.value })
-                  }
-                  placeholder="Enter routine description"
-                  className="min-h-[100px] w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                />
-              </FieldContent>
-            </Field> */}
-
-            <Field>
-              <FieldLabel>Patient Name</FieldLabel>
-              <FieldContent>
-                <Input
-                  value={formData.patientName}
-                  onChange={(e) =>
-                    setFormData({ ...formData, patientName: e.target.value })
-                  }
-                  placeholder="Patient name (optional)"
-                />
-              </FieldContent>
-            </Field>
-
-            <div className="grid grid-cols-2 gap-4">
+            <FieldGroup>
               <Field>
-                <FieldLabel>Priority</FieldLabel>
+                <FieldLabel>
+                  Routine Name <span className="text-destructive">*</span>
+                </FieldLabel>
                 <FieldContent>
-                  <Select
-                    value={formData.priority}
-                    onValueChange={(value: "LOW" | "MEDIUM" | "HIGH" | "URGENT") =>
-                      setFormData({ ...formData, priority: value })
-                    }
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="LOW">Low</SelectItem>
-                      <SelectItem value="MEDIUM">Medium</SelectItem>
-                      <SelectItem value="HIGH">High</SelectItem>
-                      <SelectItem value="URGENT">Urgent</SelectItem>
-                    </SelectContent>
-                  </Select>
+                  <Input
+                    value={formData.name}
+                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                    placeholder="e.g., Daily Check-in"
+                    required
+                    className="text-base"
+                  />
                 </FieldContent>
               </Field>
 
+              {/* Checklist Items */}
               <Field>
-                <FieldLabel>Assign To (Optional)</FieldLabel>
+                <FieldLabel>
+                  Journal Questions <span className="text-destructive">*</span>
+                </FieldLabel>
                 <FieldContent>
-                  <Select
-                    value={formData.assignedToId || "unassigned"}
-                    onValueChange={(value) =>
-                      setFormData({ ...formData, assignedToId: value === "unassigned" ? "" : value })
-                    }
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Unassigned" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="unassigned">Unassigned</SelectItem>
-                      {teamMembers.map((member) => (
-                        <SelectItem key={member.id} value={member.id}>
-                          {member.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </FieldContent>
-              </Field>
-            </div>
+                  <div className="space-y-4">
+                    {/* Preset Suggestions - Always Visible */}
+                    <div className="space-y-3 p-4 border-2 rounded-lg bg-muted/20">
+                      <div className="flex items-center justify-between mb-3">
+                        <p className="text-sm font-semibold">Quick Add from Suggestions:</p>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setShowPresets(!showPresets)}
+                          className="h-7 text-xs"
+                        >
+                          {showPresets ? "Show Less" : "Show All"}
+                        </Button>
+                      </div>
+                      
+                      {/* Quick Presets (Top 5) */}
+                      <div className="flex flex-wrap gap-2">
+                        {allPresets.slice(0, 5).map((preset) => {
+                          const isAdded = formData.checklistItems.includes(preset.label)
+                          return (
+                            <Button
+                              key={preset.id}
+                              type="button"
+                              variant={isAdded ? "default" : "outline"}
+                              size="sm"
+                              onClick={() => addQuestion(preset.label)}
+                              disabled={isAdded}
+                              className={`text-xs h-8 ${
+                                isAdded 
+                                  ? "bg-emerald-500 hover:bg-emerald-600 text-white" 
+                                  : "hover:bg-blue-50 hover:border-blue-300"
+                              }`}
+                            >
+                              {isAdded ? (
+                                <>
+                                  <Check className="h-3 w-3 mr-1" />
+                                  Added
+                                </>
+                              ) : (
+                                <>
+                                  <Plus className="h-3 w-3 mr-1" />
+                                  {preset.label}
+                                </>
+                              )}
+                            </Button>
+                          )
+                        })}
+                      </div>
 
-            <Field>
-              <FieldLabel>Recurrence Type <span className="text-destructive">*</span></FieldLabel>
-              <FieldContent>
-                <Select
-                  value={formData.recurrenceType}
-                  onValueChange={(value: "DAILY" | "WEEKLY" | "MONTHLY" | "CUSTOM_WEEKDAYS" | "SPECIFIC_DATES") =>
-                    setFormData({ ...formData, recurrenceType: value })
-                  }
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="DAILY">Daily</SelectItem>
-                    <SelectItem value="WEEKLY">Weekly</SelectItem>
-                    <SelectItem value="MONTHLY">Monthly</SelectItem>
-                    <SelectItem value="CUSTOM_WEEKDAYS">Custom Weekdays</SelectItem>
-                    <SelectItem value="SPECIFIC_DATES">Specific Dates</SelectItem>
-                  </SelectContent>
-                </Select>
-              </FieldContent>
-            </Field>
+                      {/* Full Preset List - Expandable */}
+                      {showPresets && (
+                        <motion.div
+                          initial={shouldAnimate ? { opacity: 0, height: 0 } : false}
+                          animate={shouldAnimate ? { opacity: 1, height: "auto" } : {}}
+                          className="space-y-3 pt-3 border-t"
+                        >
+                          {PRESET_CATEGORIES.map((category) => (
+                            <div key={category} className="space-y-2">
+                              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                                {category}
+                              </p>
+                              <div className="flex flex-wrap gap-2">
+                                {ROUTINE_PRESETS[category].map((preset) => {
+                                  const isAdded = formData.checklistItems.includes(preset.label)
+                                  return (
+                                    <Button
+                                      key={preset.id}
+                                      type="button"
+                                      variant={isAdded ? "default" : "outline"}
+                                      size="sm"
+                                      onClick={() => addQuestion(preset.label)}
+                                      disabled={isAdded}
+                                      className={`text-xs h-8 ${
+                                        isAdded 
+                                          ? "bg-emerald-500 hover:bg-emerald-600 text-white" 
+                                          : "hover:bg-blue-50 hover:border-blue-300"
+                                      }`}
+                                    >
+                                      {isAdded ? (
+                                        <>
+                                          <Check className="h-3 w-3 mr-1" />
+                                          Added
+                                        </>
+                                      ) : (
+                                        <>
+                                          <Plus className="h-3 w-3 mr-1" />
+                                          {preset.label}
+                                        </>
+                                      )}
+                                    </Button>
+                                  )
+                                })}
+                              </div>
+                            </div>
+                          ))}
+                        </motion.div>
+                      )}
+                    </div>
 
-            {(formData.recurrenceType === "WEEKLY" || formData.recurrenceType === "CUSTOM_WEEKDAYS") && (
-              <Field>
-                <FieldLabel>Days of Week <span className="text-destructive">*</span></FieldLabel>
-                <FieldContent>
-                  <div className="grid grid-cols-2 gap-2">
-                    {WEEKDAYS.map((day) => (
-                      <div key={day.value} className="flex items-center space-x-2">
-                        <Checkbox
-                          id={`day-${day.value}`}
-                          checked={formData.recurrenceDaysOfWeek.includes(day.value)}
-                          onCheckedChange={() => toggleWeekday(day.value)}
+                    {/* Current Questions */}
+                    {formData.checklistItems.length > 0 && (
+                      <div className="space-y-2">
+                        <p className="text-sm font-medium">Current questions:</p>
+                        {formData.checklistItems.map((item, index) => (
+                          <motion.div
+                            key={index}
+                            initial={shouldAnimate ? { opacity: 0, x: -10 } : false}
+                            animate={shouldAnimate ? { opacity: 1, x: 0 } : {}}
+                            className="flex items-center gap-2 p-3 rounded-lg border bg-background"
+                          >
+                            <span className="flex-1 text-sm">{item}</span>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => removeQuestion(index)}
+                              className="h-8 w-8 text-destructive hover:text-destructive"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </motion.div>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Add Custom Questions - Bulk Input */}
+                    <div className="space-y-2 pt-2 border-t">
+                      <p className="text-sm font-medium">Add custom questions:</p>
+                      <p className="text-xs text-muted-foreground mb-2">
+                        Enter one question per line, or type and press Enter to add individually
+                      </p>
+                      <div className="space-y-2">
+                        <textarea
+                          value={newQuestion}
+                          onChange={(e) => setNewQuestion(e.target.value)}
+                          placeholder="Enter questions, one per line:&#10;Did you take your medication?&#10;Did you exercise?&#10;Did you feel good today?"
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" && !e.shiftKey) {
+                              e.preventDefault()
+                              // If it's a single line, add it
+                              if (newQuestion.trim().split('\n').length === 1) {
+                                addQuestion()
+                              } else {
+                                // If multiple lines, add all of them
+                                const questions = newQuestion
+                                  .split('\n')
+                                  .map(q => q.trim())
+                                  .filter(q => q.length > 0 && !formData.checklistItems.includes(q))
+                                
+                                if (questions.length > 0) {
+                                  setFormData(prev => ({
+                                    ...prev,
+                                    checklistItems: [...prev.checklistItems, ...questions],
+                                  }))
+                                  setNewQuestion("")
+                                }
+                              }
+                            }
+                          }}
+                          className="w-full min-h-[100px] rounded-md border-2 border-input bg-transparent px-4 py-3 text-base shadow-xs ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 resize-y"
+                          rows={4}
                         />
-                        <Label
-                          htmlFor={`day-${day.value}`}
-                          className="text-sm font-normal cursor-pointer"
+                        <div className="flex gap-2">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            onClick={() => {
+                              // Add all lines as separate questions
+                              const questions = newQuestion
+                                .split('\n')
+                                .map(q => q.trim())
+                                .filter(q => q.length > 0 && !formData.checklistItems.includes(q))
+                              
+                              if (questions.length > 0) {
+                                setFormData(prev => ({
+                                  ...prev,
+                                  checklistItems: [...prev.checklistItems, ...questions],
+                                }))
+                                setNewQuestion("")
+                                toast.success(`Added ${questions.length} question${questions.length > 1 ? 's' : ''}`)
+                              } else if (newQuestion.trim()) {
+                                // Single question fallback
+                                addQuestion()
+                              }
+                            }}
+                            className="bg-blue-50 hover:bg-blue-100 border-blue-200 flex-1"
+                          >
+                            <Plus className="h-4 w-4 mr-2" />
+                            Add All Questions
+                          </Button>
+                          {newQuestion.trim() && (
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              onClick={() => setNewQuestion("")}
+                              className="h-10"
+                            >
+                              <X className="h-4 w-4" />
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </FieldContent>
+              </Field>
+
+              {/* Days of Week */}
+              <Field>
+                <FieldLabel>
+                  Which Days? <span className="text-destructive">*</span>
+                </FieldLabel>
+                <FieldContent>
+                  <div className="space-y-3">
+                    {/* Selection Summary */}
+                    <div className="p-3 rounded-lg bg-blue-50 border border-blue-200">
+                      <p className="text-sm font-medium text-blue-900">
+                        Selected: <span className="font-semibold">{getDaySelectionLabel()}</span>
+                      </p>
+                    </div>
+                    
+                    {/* Day Buttons */}
+                    <div className="flex flex-wrap gap-2">
+                      {WEEKDAYS.map((day) => (
+                        <Button
+                          key={day.value}
+                          type="button"
+                          variant={formData.recurrenceDaysOfWeek.includes(day.value) ? "default" : "outline"}
+                          size="sm"
+                          onClick={() => toggleWeekday(day.value)}
+                          className={`h-10 px-4 ${
+                            formData.recurrenceDaysOfWeek.includes(day.value)
+                              ? "bg-blue-600 hover:bg-blue-700 text-white"
+                              : ""
+                          }`}
                         >
                           {day.label}
-                        </Label>
-                      </div>
-                    ))}
-                  </div>
-                </FieldContent>
-              </Field>
-            )}
-
-            {formData.recurrenceType === "MONTHLY" && (
-              <Field>
-                <FieldLabel>Day of Month <span className="text-destructive">*</span></FieldLabel>
-                <FieldContent>
-                  <Input
-                    type="number"
-                    min="1"
-                    max="31"
-                    value={formData.recurrenceDayOfMonth || ""}
-                    onChange={(e) =>
-                      setFormData({ ...formData, recurrenceDayOfMonth: parseInt(e.target.value) || null })
-                    }
-                    placeholder="1-31"
-                  />
-                </FieldContent>
-              </Field>
-            )}
-
-            {formData.recurrenceType === "SPECIFIC_DATES" && (
-              <Field>
-                <FieldLabel>Specific Dates <span className="text-destructive">*</span></FieldLabel>
-                <FieldContent>
-                  <div className="space-y-2">
-                    {formData.recurrenceSpecificDates.map((date, index) => (
-                      <div key={index} className="flex gap-2">
-                        <Input
-                          type="date"
-                          value={date.split("T")[0]}
-                          onChange={(e) => {
-                            const newDates = [...formData.recurrenceSpecificDates]
-                            newDates[index] = new Date(e.target.value).toISOString()
-                            setFormData({ ...formData, recurrenceSpecificDates: newDates })
-                          }}
-                        />
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => {
-                            setFormData({
-                              ...formData,
-                              recurrenceSpecificDates: formData.recurrenceSpecificDates.filter((_, i) => i !== index),
-                            })
-                          }}
-                        >
-                          <Trash2 className="h-4 w-4" />
                         </Button>
-                      </div>
-                    ))}
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() => {
-                        setFormData({
-                          ...formData,
-                          recurrenceSpecificDates: [...formData.recurrenceSpecificDates, new Date().toISOString()],
-                        })
-                      }}
-                    >
-                      Add Date
-                    </Button>
-                  </div>
-                </FieldContent>
-              </Field>
-            )}
-
-            <div className="grid grid-cols-2 gap-4">
-              <Field>
-                <FieldLabel>Start Date <span className="text-destructive">*</span></FieldLabel>
-                <FieldContent>
-                  <Input
-                    type="date"
-                    value={formData.startDate}
-                    onChange={(e) =>
-                      setFormData({ ...formData, startDate: e.target.value })
-                    }
-                    required
-                  />
-                </FieldContent>
-              </Field>
-
-              <Field>
-                <FieldLabel>End Date (Optional)</FieldLabel>
-                <FieldContent>
-                  <Input
-                    type="date"
-                    value={formData.endDate}
-                    onChange={(e) =>
-                      setFormData({ ...formData, endDate: e.target.value })
-                    }
-                    min={formData.startDate}
-                  />
-                </FieldContent>
-              </Field>
-            </div>
-
-            <Field>
-              <FieldLabel>Time of Day (Optional)</FieldLabel>
-              <FieldContent>
-                <Input
-                  type="time"
-                  value={formData.timeOfDay}
-                  onChange={(e) =>
-                    setFormData({ ...formData, timeOfDay: e.target.value })
-                  }
-                />
-              </FieldContent>
-            </Field>
-
-            <div className="flex items-center space-x-2">
-              <Checkbox
-                id="autoGenerateTasks"
-                checked={formData.autoGenerateTasks}
-                onCheckedChange={(checked) =>
-                  setFormData({ ...formData, autoGenerateTasks: checked as boolean })
-                }
-              />
-              <Label htmlFor="autoGenerateTasks" className="text-sm font-normal cursor-pointer">
-                Automatically generate tasks when routine occurs
-              </Label>
-            </div>
-
-            {formData.autoGenerateTasks && (
-              <Field>
-                <FieldLabel>Generate Tasks Days Ahead</FieldLabel>
-                <FieldContent>
-                  <Input
-                    type="number"
-                    min="1"
-                    max="30"
-                    value={formData.generateDaysAhead}
-                    onChange={(e) =>
-                      setFormData({ ...formData, generateDaysAhead: parseInt(e.target.value) || 7 })
-                    }
-                  />
-                </FieldContent>
-              </Field>
-            )}
-
-            <div className="flex items-center space-x-2">
-              <Checkbox
-                id="hasJournalEntry"
-                checked={formData.hasJournalEntry}
-                onCheckedChange={(checked) =>
-                  setFormData({ ...formData, hasJournalEntry: checked as boolean })
-                }
-              />
-              <Label htmlFor="hasJournalEntry" className="text-sm font-normal cursor-pointer">
-                Enable journal entry tracking
-              </Label>
-            </div>
-
-            {formData.hasJournalEntry && (
-              <Field>
-                <FieldLabel>Journal Prompts (Optional)</FieldLabel>
-                <FieldContent>
-                  <div className="space-y-2">
-                    {formData.journalPrompts.map((prompt, index) => (
-                      <div key={index} className="flex gap-2">
-                        <Input
-                          value={prompt}
-                          onChange={(e) => {
-                            const newPrompts = [...formData.journalPrompts]
-                            newPrompts[index] = e.target.value
-                            setFormData({ ...formData, journalPrompts: newPrompts })
-                          }}
-                          placeholder="Prompt question"
-                        />
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => removeJournalPrompt(index)}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    ))}
-                    <div className="flex gap-2">
-                      <Input
-                        value={newPrompt}
-                        onChange={(e) => setNewPrompt(e.target.value)}
-                        placeholder="Add a journal prompt"
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter") {
-                            e.preventDefault()
-                            addJournalPrompt()
-                          }
-                        }}
-                      />
+                      ))}
+                    </div>
+                    
+                    {/* Quick Selection Buttons */}
+                    <div className="flex flex-wrap gap-2">
                       <Button
                         type="button"
                         variant="outline"
-                        onClick={addJournalPrompt}
+                        size="sm"
+                        onClick={() => setFormData(prev => ({ ...prev, recurrenceDaysOfWeek: [0, 1, 2, 3, 4, 5, 6] }))}
+                        className="h-9 text-xs"
                       >
-                        Add
+                        Every Day
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setFormData(prev => ({ ...prev, recurrenceDaysOfWeek: [1, 2, 3, 4, 5] }))}
+                        className="h-9 text-xs"
+                      >
+                        Weekdays
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setFormData(prev => ({ ...prev, recurrenceDaysOfWeek: [0, 6] }))}
+                        className="h-9 text-xs"
+                      >
+                        Weekends
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setFormData(prev => ({ ...prev, recurrenceDaysOfWeek: [] }))}
+                        className="h-9 text-xs text-muted-foreground"
+                      >
+                        Clear All
                       </Button>
                     </div>
                   </div>
                 </FieldContent>
               </Field>
-            )}
 
-            <div className="flex items-center space-x-2">
-              <Checkbox
-                id="isActive"
-                checked={formData.isActive}
-                onCheckedChange={(checked) =>
-                  setFormData({ ...formData, isActive: checked as boolean })
-                }
-              />
-              <Label htmlFor="isActive" className="text-sm font-normal cursor-pointer">
-                Routine is active
-              </Label>
-            </div>
-          </FieldGroup>
+              {/* Date Range */}
+              <div className="grid grid-cols-2 gap-4">
+                <Field>
+                  <FieldLabel>
+                    Start Date <span className="text-destructive">*</span>
+                  </FieldLabel>
+                  <FieldContent>
+                    <Input
+                      type="date"
+                      value={formData.startDate}
+                      onChange={(e) => setFormData({ ...formData, startDate: e.target.value })}
+                      required
+                      className="text-base"
+                    />
+                  </FieldContent>
+                </Field>
+
+                <Field>
+                  <FieldLabel>End Date (Optional)</FieldLabel>
+                  <FieldContent>
+                    <Input
+                      type="date"
+                      value={formData.endDate}
+                      onChange={(e) => setFormData({ ...formData, endDate: e.target.value })}
+                      className="text-base"
+                    />
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Leave empty to run indefinitely (recommended)
+                    </p>
+                  </FieldContent>
+                </Field>
+              </div>
+
+              {/* Active Status */}
+              <Field>
+                <FieldContent>
+                  <div className="flex items-center gap-2">
+                    <Checkbox
+                      id="isActive"
+                      checked={formData.isActive}
+                      onCheckedChange={(checked) =>
+                        setFormData({ ...formData, isActive: checked === true })
+                      }
+                    />
+                    <Label htmlFor="isActive" className="text-sm font-normal cursor-pointer">
+                      Active (routine will prompt for journal entries)
+                    </Label>
+                  </div>
+                </FieldContent>
+              </Field>
+            </FieldGroup>
           </div>
 
-          <SheetFooter className="px-6 py-4 border-t shrink-0 bg-background">
-            {routine && onDelete ? (
-              <Button
-                type="button"
-                variant="destructive"
-                onClick={handleDelete}
-                disabled={loading}
-              >
-                <Trash2 className="h-4 w-4 mr-2" />
-                Delete
-              </Button>
-            ) : (
+          <div className="px-6 py-4 shrink-0 border-t flex items-center justify-between gap-2">
+            <div>
+              {routine && onDelete && (
+                <Button
+                  type="button"
+                  variant="destructive"
+                  onClick={handleDelete}
+                  disabled={loading}
+                >
+                  <Trash2 className="h-4 w-4 mr-2" />
+                  Delete
+                </Button>
+              )}
+            </div>
+            <div className="flex gap-2">
               <Button
                 type="button"
                 variant="outline"
                 onClick={() => onOpenChange(false)}
                 disabled={loading}
+                className="h-11 px-6"
               >
                 Cancel
               </Button>
-            )}
-            <Button type="submit" disabled={loading}>
-              {loading ? "Saving..." : routine ? "Update Routine" : "Create Routine"}
-            </Button>
-          </SheetFooter>
+              <Button
+                type="submit"
+                disabled={loading}
+                className="bg-emerald-500 hover:bg-emerald-600 text-white h-11 px-6"
+              >
+                {loading ? "Saving..." : routine ? "Update" : "Create Routine"}
+              </Button>
+            </div>
+          </div>
         </form>
-      </SheetContent>
-    </Sheet>
+      </DialogContent>
+    </Dialog>
   )
 }
 
