@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@clerk/nextjs/server"
 import { prisma } from "@/lib/prisma"
 import { getCurrentUser } from "@/lib/get-user"
+import { updateNoteSchema, validateRequest, formatZodError } from "@/lib/validations"
 
 // GET /api/teams/[teamId]/notes/[noteId] - Get a specific note
 export async function GET(
@@ -167,8 +168,15 @@ export async function PATCH(
       )
     }
 
-    const body = await request.json()
-    const { title, content } = body
+    // Validate request body
+    const validation = await validateRequest(request, updateNoteSchema)
+    if (validation.error) {
+      return NextResponse.json(
+        formatZodError(validation.error),
+        { status: 400 }
+      )
+    }
+    const { title, content } = validation.data
 
     // Update note
     const updatedNote = await prisma.note.update({

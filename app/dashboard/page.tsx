@@ -19,6 +19,8 @@ import { TaskForm } from "@/components/task-form"
 import { NightlyJournalModal } from "@/components/nightly-journal-modal"
 import { format, isToday, isPast, startOfDay } from "date-fns"
 import { useRouter } from "next/navigation"
+import { XCircle, Repeat } from "lucide-react"
+import { Button } from "@/components/ui/button"
 
 // Types are now imported from use-data-store
 
@@ -121,6 +123,13 @@ export default function DashboardPage() {
       null
     )
   }, [errors, activeTeam])
+
+  // Handle errors gracefully - don't crash the page
+  const hasErrors = error !== null
+  const hasData = 
+    (allTasksFromStore[activeTeam?.id || ""] !== undefined) ||
+    (routinesFromStore[activeTeam?.id || ""] !== undefined) ||
+    (moodsFromStore[activeTeam?.id || ""] !== undefined)
 
   // Calculate today's summary
   const today = new Date()
@@ -428,21 +437,43 @@ export default function DashboardPage() {
     )
   }
 
-  if (isLoading) {
+  // Show loading only if we have no data at all
+  if (isLoading && !hasData) {
     return (
-      <div className="flex items-center justify-center h-full">
-        <Spinner className="h-8 w-8" />
+      <div className="flex items-center justify-center min-h-[400px]">
+        <div className="text-center">
+          <Spinner className="h-8 w-8 mx-auto mb-4" />
+          <p className="text-muted-foreground">Loading dashboard...</p>
+        </div>
       </div>
     )
   }
 
-  if (error) {
+  // Show error only if we have no data at all
+  if (hasErrors && !hasData) {
     return (
-      <div className="flex items-center justify-center h-full">
-        <Card>
-          <CardContent className="p-6">
-            <p className="text-destructive">{error}</p>
-          </CardContent>
+      <div className="flex items-center justify-center min-h-[400px] p-6">
+        <Card className="p-8 text-center max-w-md w-full">
+          <div className="w-16 h-16 rounded-full bg-destructive/10 flex items-center justify-center mx-auto mb-4">
+            <XCircle className="h-8 w-8 text-destructive" />
+          </div>
+          <h2 className="text-xl font-semibold mb-2">Failed to load dashboard</h2>
+          <p className="text-muted-foreground mb-6">
+            {error || "An error occurred while loading data. Please try again."}
+          </p>
+          <Button
+            onClick={() => {
+              if (activeTeam) {
+                fetchTasks(activeTeam.id, true)
+                fetchRoutines(activeTeam.id, true)
+                fetchMoods(activeTeam.id, true)
+              }
+            }}
+            variant="outline"
+          >
+            <Repeat className="h-4 w-4 mr-2" />
+            Retry
+          </Button>
         </Card>
       </div>
     )
@@ -451,6 +482,33 @@ export default function DashboardPage() {
   return (
     <div className="flex flex-col h-full overflow-auto w-full">
       <div className="flex-1 p-4 md:p-6 space-y-5 max-w-6xl mx-auto w-full">
+        {/* Error Banner - Show if there's an error but we have some data */}
+        {hasErrors && hasData && (
+          <div className="p-3 rounded-lg border border-destructive/50 bg-destructive/10 flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2 min-w-0 flex-1">
+              <XCircle className="h-4 w-4 text-destructive shrink-0" />
+              <p className="text-sm text-destructive">
+                {error}. Some data may be outdated.
+              </p>
+            </div>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                if (activeTeam) {
+                  fetchTasks(activeTeam.id, true)
+                  fetchRoutines(activeTeam.id, true)
+                  fetchMoods(activeTeam.id, true)
+                }
+              }}
+              className="shrink-0"
+            >
+              <Repeat className="h-3 w-3 mr-1" />
+              Retry
+            </Button>
+          </div>
+        )}
+
         {/* Welcome Header with Quick Actions */}
         <WelcomeHeader
           teamName={activeTeam.name}

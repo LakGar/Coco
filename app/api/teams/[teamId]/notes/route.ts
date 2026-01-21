@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@clerk/nextjs/server"
 import { prisma } from "@/lib/prisma"
 import { getCurrentUser } from "@/lib/get-user"
+import { createNoteSchema, validateRequest, formatZodError } from "@/lib/validations"
+import { rateLimit, addRateLimitHeaders } from "@/lib/rate-limit"
 
 // GET /api/teams/[teamId]/notes - Get all notes for a team (user can see if they're creator, editor, or viewer)
 export async function GET(
@@ -12,6 +14,20 @@ export async function GET(
     const { userId } = await auth()
     if (!userId) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    }
+
+    // Rate limiting
+    const rateLimitResult = await rateLimit(request, "GET", userId)
+    if (!rateLimitResult.success) {
+      const response = NextResponse.json(
+        {
+          error: "Too many requests",
+          message: "Rate limit exceeded. Please try again later.",
+        },
+        { status: 429 }
+      )
+      addRateLimitHeaders(response.headers, rateLimitResult.limit, rateLimitResult.remaining, rateLimitResult.reset)
+      return response
     }
 
     const resolvedParams = params instanceof Promise ? await params : params
@@ -112,7 +128,9 @@ export async function GET(
       }
     })
 
-    return NextResponse.json({ notes: notesWithPermissions })
+    const response = NextResponse.json({ notes: notesWithPermissions })
+    addRateLimitHeaders(response.headers, rateLimitResult.limit, rateLimitResult.remaining, rateLimitResult.reset)
+    return response
   } catch (error) {
     console.error("Error fetching notes:", error)
     return NextResponse.json(
@@ -131,6 +149,20 @@ export async function POST(
     const { userId } = await auth()
     if (!userId) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    }
+
+    // Rate limiting
+    const rateLimitResult = await rateLimit(request, "POST", userId)
+    if (!rateLimitResult.success) {
+      const response = NextResponse.json(
+        {
+          error: "Too many requests",
+          message: "Rate limit exceeded. Please try again later.",
+        },
+        { status: 429 }
+      )
+      addRateLimitHeaders(response.headers, rateLimitResult.limit, rateLimitResult.remaining, rateLimitResult.reset)
+      return response
     }
 
     const resolvedParams = params instanceof Promise ? await params : params
@@ -156,15 +188,15 @@ export async function POST(
       )
     }
 
-    const body = await request.json()
-    const { title, content, editorIds = [], viewerIds = [] } = body
-
-    if (!title || !content) {
+    // Validate request body
+    const validation = await validateRequest(request, createNoteSchema)
+    if (validation.error) {
       return NextResponse.json(
-        { error: "Title and content are required" },
+        formatZodError(validation.error),
         { status: 400 }
       )
     }
+    const { title, content, editorIds = [], viewerIds = [] } = validation.data
 
     // Validate that editorIds and viewerIds are team members
     const teamMemberIds = await prisma.careTeamMember.findMany({

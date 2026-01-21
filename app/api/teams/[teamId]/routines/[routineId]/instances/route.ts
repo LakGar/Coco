@@ -1,6 +1,7 @@
 import { auth } from '@clerk/nextjs/server'
 import { prisma } from '@/lib/prisma'
 import { NextResponse } from 'next/server'
+import { createRoutineInstanceSchema, validateRequest, formatZodError } from '@/lib/validations'
 
 export async function GET(
   req: Request,
@@ -137,15 +138,15 @@ export async function POST(
       )
     }
 
-    const body = await req.json()
-    const { entryDate, answers, notes } = body
-
-    if (!entryDate) {
+    // Validate request body
+    const validation = await validateRequest(req, createRoutineInstanceSchema)
+    if (validation.error) {
       return NextResponse.json(
-        { error: 'entryDate is required' },
+        formatZodError(validation.error),
         { status: 400 }
       )
     }
+    const { entryDate, answers, completedItems, skippedItems, notes } = validation.data
 
     // Create or update instance
     const entryDateObj = new Date(entryDate)
@@ -159,7 +160,7 @@ export async function POST(
         },
       },
       update: {
-        answers: answers || {},
+        ...(answers !== undefined && { answers }),
         notes: notes || null,
         filledOutAt: new Date(),
         filledOutBy: user.id,
@@ -167,7 +168,7 @@ export async function POST(
       create: {
         routineId: routineId,
         entryDate: entryDateObj,
-        answers: answers || {},
+        ...(answers !== undefined && { answers }),
         notes: notes || null,
         filledOutAt: new Date(),
         filledOutBy: user.id,

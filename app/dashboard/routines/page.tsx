@@ -3,6 +3,7 @@
 import * as React from "react"
 import { motion, useReducedMotion } from "framer-motion"
 import { useTeamStore } from "@/store/use-team-store"
+import { useDataStore, type Routine, type TeamData } from "@/store/use-data-store"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent } from "@/components/ui/card"
@@ -14,51 +15,19 @@ import { Plus, Search, Repeat, BookOpen, PenTool, Calendar, X, XCircle, Check, X
 import { RoutineCircularChart } from "@/components/routine-circular-chart"
 import { toast } from "sonner"
 
-interface Routine {
-  id: string
-  name: string
-  description?: string | null
-  checklistItems: string[]
-  recurrenceDaysOfWeek: number[]
-  startDate: string
-  endDate?: string | null
-  isActive: boolean
-  createdAt: string
-  instances?: Array<{
-    id: string
-    entryDate: string
-    answers?: Record<string, boolean>
-    notes?: string | null
-    filledOutAt?: string
-  }>
-  _count?: {
-    instances: number
-  }
-}
-
-interface TeamData {
-  team: {
-    id: string
-    name: string
-  }
-  members: Array<{
-    id: string
-    name: string
-    email: string
-  }>
-  currentUser: {
-    id: string
-    isAdmin: boolean
-    accessLevel: string
-  }
-}
-
 export default function RoutinesPage() {
   const { activeTeam } = useTeamStore()
-  const [routines, setRoutines] = React.useState<Routine[]>([])
-  const [teamData, setTeamData] = React.useState<TeamData | null>(null)
-  const [loading, setLoading] = React.useState(true)
-  const [error, setError] = React.useState<string | null>(null)
+  const {
+    routines: routinesFromStore,
+    teamData: teamDataFromStore,
+    fetchRoutines,
+    fetchTeamData,
+    addRoutine,
+    updateRoutine,
+    removeRoutine,
+    loading,
+    errors
+  } = useDataStore()
   const [formOpen, setFormOpen] = React.useState(false)
   const [editingRoutine, setEditingRoutine] = React.useState<Routine | null>(null)
   const [searchQuery, setSearchQuery] = React.useState("")
@@ -70,49 +39,69 @@ export default function RoutinesPage() {
   const shouldReduceMotion = useReducedMotion()
   const shouldAnimate = !shouldReduceMotion
 
-  // Fetch routines
+  // Fetch routines and team data on mount and when team changes
   React.useEffect(() => {
-    const fetchData = async () => {
-      if (!activeTeam) {
-        setError("No active team selected")
-        setLoading(false)
-        return
-      }
+    if (!activeTeam) return
 
+    const loadData = async () => {
       try {
-        const teamResponse = await fetch(`/api/teams/${activeTeam.id}/members`)
-        if (teamResponse.ok) {
-          const teamData = await teamResponse.json()
-          setTeamData(teamData)
-        }
-
-        const routinesResponse = await fetch(`/api/teams/${activeTeam.id}/routines`)
-        if (!routinesResponse.ok) {
-          throw new Error("Failed to load routines")
-        }
-        const data = await routinesResponse.json()
-        setRoutines(data.routines || [])
+        await Promise.all([
+          fetchRoutines(activeTeam.id),
+          fetchTeamData(activeTeam.id),
+        ])
       } catch (error) {
-        console.error("Error fetching data:", error)
-        setError("Failed to load routines")
-      } finally {
-        setLoading(false)
+        console.error("Error loading routines/team data:", error)
       }
     }
 
-    fetchData()
-  }, [activeTeam])
+    loadData()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTeam?.id]) // Only depend on team ID, not the functions
 
-  const handleFormSuccess = () => {
+  // Get routines and team data from store
+  const routines = React.useMemo(() => {
+    if (!activeTeam) return []
+    const storedRoutines = routinesFromStore[activeTeam.id]
+    return Array.isArray(storedRoutines) ? storedRoutines : []
+  }, [routinesFromStore, activeTeam])
+  
+  const teamData = React.useMemo(() => {
+    if (!activeTeam) return null
+    return teamDataFromStore[activeTeam.id] || null
+  }, [teamDataFromStore, activeTeam])
+
+  // Get loading/error states - only show loading if actively fetching AND no data
+  const isLoading = React.useMemo(() => {
+    if (!activeTeam) return false
+    
+    const hasAnyData = 
+      (routinesFromStore[activeTeam.id] !== undefined) ||
+      (teamDataFromStore[activeTeam.id] !== undefined)
+    
+    // If we have any data, don't show loading
+    if (hasAnyData) {
+      return false
+    }
+    
+    // Only show loading if we're actively fetching and have no data
+    return loading[`routines-${activeTeam.id}`] || loading[`teamData-${activeTeam.id}`]
+  }, [loading, activeTeam, routinesFromStore, teamDataFromStore])
+
+  const error = React.useMemo(() => {
+    if (!activeTeam) return "No active team selected"
+    return errors[`routines-${activeTeam.id}`] || errors[`teamData-${activeTeam.id}`] || null
+  }, [errors, activeTeam])
+
+  const handleFormSuccess = async () => {
     if (!activeTeam) return
-    fetch(`/api/teams/${activeTeam.id}/routines`)
-      .then((res) => res.json())
-      .then((data) => setRoutines(data.routines || []))
-      .catch(console.error)
+    await fetchRoutines(activeTeam.id, true) // Force refresh
   }
 
   const handleDeleteRoutine = async (routineId: string) => {
     if (!activeTeam) return
+
+    // Optimistic update
+    removeRoutine(activeTeam.id, routineId)
 
     try {
       const response = await fetch(`/api/teams/${activeTeam.id}/routines/${routineId}`, {
@@ -124,10 +113,12 @@ export default function RoutinesPage() {
       }
 
       toast.success("Routine deleted successfully")
-      handleFormSuccess()
+      await fetchRoutines(activeTeam.id, true) // Force refresh
     } catch (error) {
       console.error("Error deleting routine:", error)
       toast.error("Failed to delete routine")
+      // Revert optimistic update on error
+      await fetchRoutines(activeTeam.id, true)
     }
   }
 
@@ -207,7 +198,7 @@ export default function RoutinesPage() {
 
       toast.success("Journal entry saved!")
       setJournalModalOpen(false)
-      handleFormSuccess()
+      await fetchRoutines(activeTeam.id, true) // Force refresh
     } catch (error) {
       console.error("Error saving journal entry:", error)
       throw error
@@ -232,27 +223,42 @@ export default function RoutinesPage() {
 
   const canCreateRoutines = teamData?.currentUser.accessLevel === "FULL" || teamData?.currentUser.isAdmin
 
-  if (loading) {
+  // Show error state with retry option (only if no data at all)
+  if (error && routines.length === 0 && !isLoading) {
     return (
-      <div className="flex items-center justify-center h-full">
-        <div className="text-center">
-          <Spinner className="mx-auto mb-4 text-primary" size="lg" />
-          <p className="text-muted-foreground">Loading routines...</p>
-        </div>
+      <div className="flex items-center justify-center min-h-[400px] p-6">
+        <Card className="p-8 text-center max-w-md w-full">
+          <div className="w-16 h-16 rounded-full bg-destructive/10 flex items-center justify-center mx-auto mb-4">
+            <XCircle className="h-8 w-8 text-destructive" />
+          </div>
+          <h2 className="text-xl font-semibold mb-2">Failed to load routines</h2>
+          <p className="text-muted-foreground mb-6">
+            {error || "An error occurred while loading routines. Please try again."}
+          </p>
+          <Button
+            onClick={() => {
+              if (activeTeam) {
+                fetchRoutines(activeTeam.id, true)
+                fetchTeamData(activeTeam.id, true)
+              }
+            }}
+            variant="outline"
+          >
+            <Repeat className="h-4 w-4 mr-2" />
+            Retry
+          </Button>
+        </Card>
       </div>
     )
   }
 
-  if (error) {
+  if (isLoading && routines.length === 0) {
     return (
-      <div className="flex items-center justify-center h-full">
-        <Card className="p-8 text-center max-w-md">
-          <div className="w-16 h-16 rounded-full bg-destructive/10 flex items-center justify-center mx-auto mb-4">
-            <XCircle className="h-8 w-8 text-destructive" />
-          </div>
-          <h2 className="text-2xl font-semibold mb-2">Error</h2>
-          <p className="text-muted-foreground">{error}</p>
-        </Card>
+      <div className="flex items-center justify-center min-h-[400px]">
+        <div className="text-center">
+          <Spinner className="mx-auto mb-4 text-primary" size="lg" />
+          <p className="text-muted-foreground">Loading routines...</p>
+        </div>
       </div>
     )
   }
@@ -282,6 +288,32 @@ export default function RoutinesPage() {
               )}
             </div>
           </div>
+
+          {/* Error Banner - Show if there's an error but we have some data */}
+          {error && routines.length > 0 && (
+            <div className="mb-4 p-3 rounded-lg border border-destructive/50 bg-destructive/10 flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2 min-w-0 flex-1">
+                <XCircle className="h-4 w-4 text-destructive shrink-0" />
+                <p className="text-sm text-destructive truncate">
+                  {error}. Some data may be outdated.
+                </p>
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  if (activeTeam) {
+                    fetchRoutines(activeTeam.id, true)
+                    fetchTeamData(activeTeam.id, true)
+                  }
+                }}
+                className="shrink-0"
+              >
+                <Repeat className="h-3 w-3 mr-1" />
+                Retry
+              </Button>
+            </div>
+          )}
 
           {/* Search and Filters */}
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full">
@@ -439,8 +471,11 @@ export default function RoutinesPage() {
                             {/* Questions with Last Answers */}
                             <div className="space-y-2">
                               {routine.checklistItems.map((question, qIndex) => {
-                                const lastAnswer = lastEntry?.answers?.[question]
-                                const hasAnswer = lastAnswer !== undefined
+                                // Check if question was completed or skipped in last entry
+                                const wasCompleted = lastEntry?.completedItems?.includes(question) || false
+                                const wasSkipped = lastEntry?.skippedItems?.includes(question) || false
+                                const hasAnswer = wasCompleted || wasSkipped
+                                const lastAnswer = wasCompleted ? true : wasSkipped ? false : undefined
                                 
                                 return (
                                   <div

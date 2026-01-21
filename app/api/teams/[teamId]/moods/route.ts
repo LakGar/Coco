@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@clerk/nextjs/server"
 import { prisma } from "@/lib/prisma"
 import { getCurrentUser } from "@/lib/get-user"
+import { rateLimit, addRateLimitHeaders } from "@/lib/rate-limit"
 
 // GET /api/teams/[teamId]/moods - Get moods for a team
 export async function GET(
@@ -12,6 +13,20 @@ export async function GET(
     const { userId } = await auth()
     if (!userId) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    }
+
+    // Rate limiting
+    const rateLimitResult = await rateLimit(request, "GET", userId)
+    if (!rateLimitResult.success) {
+      const response = NextResponse.json(
+        {
+          error: "Too many requests",
+          message: "Rate limit exceeded. Please try again later.",
+        },
+        { status: 429 }
+      )
+      addRateLimitHeaders(response.headers, rateLimitResult.limit, rateLimitResult.remaining, rateLimitResult.reset)
+      return response
     }
 
     const resolvedParams = params instanceof Promise ? await params : params
@@ -56,7 +71,9 @@ export async function GET(
       take: 30, // Last 30 mood entries
     })
 
-    return NextResponse.json(moods)
+    const response = NextResponse.json(moods)
+    addRateLimitHeaders(response.headers, rateLimitResult.limit, rateLimitResult.remaining, rateLimitResult.reset)
+    return response
   } catch (error) {
     console.error("Error fetching moods:", error)
     return NextResponse.json(
@@ -75,6 +92,20 @@ export async function POST(
     const { userId } = await auth()
     if (!userId) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    }
+
+    // Rate limiting
+    const rateLimitResult = await rateLimit(request, "POST", userId)
+    if (!rateLimitResult.success) {
+      const response = NextResponse.json(
+        {
+          error: "Too many requests",
+          message: "Rate limit exceeded. Please try again later.",
+        },
+        { status: 429 }
+      )
+      addRateLimitHeaders(response.headers, rateLimitResult.limit, rateLimitResult.remaining, rateLimitResult.reset)
+      return response
     }
 
     const resolvedParams = params instanceof Promise ? await params : params
@@ -96,28 +127,15 @@ export async function POST(
       return NextResponse.json({ error: "Not a team member" }, { status: 403 })
     }
 
-    const body = await request.json()
-    const { rating, notes, observedAt } = body
-
-    if (!rating) {
+    // Validate request body
+    const validation = await validateRequest(request, createMoodSchema)
+    if (validation.error) {
       return NextResponse.json(
-        { error: "Rating is required" },
+        formatZodError(validation.error),
         { status: 400 }
       )
     }
-
-    // Validate rating
-    const validRatings = [
-      "CALM", "CONTENT", "NEUTRAL", "RELAXED",
-      "SAD", "WITHDRAWN", "TIRED",
-      "ANXIOUS", "IRRITABLE", "RESTLESS", "CONFUSED"
-    ]
-    if (!validRatings.includes(rating)) {
-      return NextResponse.json(
-        { error: "Invalid rating" },
-        { status: 400 }
-      )
-    }
+    const { rating, notes, observedAt } = validation.data
 
     // Create mood entry
     const mood = await prisma.mood.create({
@@ -142,7 +160,9 @@ export async function POST(
       },
     })
 
-    return NextResponse.json(mood, { status: 201 })
+    const response = NextResponse.json(mood, { status: 201 })
+    addRateLimitHeaders(response.headers, rateLimitResult.limit, rateLimitResult.remaining, rateLimitResult.reset)
+    return response
   } catch (error: any) {
     console.error("Error creating mood:", error)
     console.error("Error details:", {

@@ -1,6 +1,8 @@
 import { auth } from '@clerk/nextjs/server'
 import { prisma } from '@/lib/prisma'
 import { NextResponse } from 'next/server'
+import { updateRoutineSchema, validateRequest, formatZodError } from '@/lib/validations'
+import { rateLimit, addRateLimitHeaders } from '@/lib/rate-limit'
 
 export async function PATCH(
   req: Request,
@@ -61,7 +63,14 @@ export async function PATCH(
       )
     }
 
-    const body = await req.json()
+    // Validate request body
+    const validation = await validateRequest(req, updateRoutineSchema)
+    if (validation.error) {
+      return NextResponse.json(
+        formatZodError(validation.error),
+        { status: 400 }
+      )
+    }
     const {
       name,
       description,
@@ -70,8 +79,7 @@ export async function PATCH(
       recurrenceDaysOfWeek,
       startDate,
       endDate,
-      isActive,
-    } = body
+    } = validation.data
 
     // Update routine
     const updatedRoutine = await prisma.routine.update({
@@ -102,7 +110,9 @@ export async function PATCH(
       },
     })
 
-    return NextResponse.json({ routine: updatedRoutine })
+    const response = NextResponse.json({ routine: updatedRoutine })
+    addRateLimitHeaders(response.headers, rateLimitResult.limit, rateLimitResult.remaining, rateLimitResult.reset)
+    return response
   } catch (error) {
     console.error('Error updating routine:', error)
     return NextResponse.json(
@@ -188,7 +198,9 @@ export async function DELETE(
       where: { id: routineId },
     })
 
-    return NextResponse.json({ success: true })
+    const response = NextResponse.json({ success: true })
+    addRateLimitHeaders(response.headers, rateLimitResult.limit, rateLimitResult.remaining, rateLimitResult.reset)
+    return response
   } catch (error) {
     console.error('Error deleting routine:', error)
     return NextResponse.json(

@@ -2,6 +2,8 @@ import { auth } from '@clerk/nextjs/server'
 import { prisma } from '@/lib/prisma'
 import { NextResponse } from 'next/server'
 import { TaskPriority, TaskStatus } from '@prisma/client'
+import { createTaskSchema, validateRequest, formatZodError } from '@/lib/validations'
+import { rateLimit, addRateLimitHeaders } from '@/lib/rate-limit'
 
 export async function GET(
   req: Request,
@@ -15,6 +17,20 @@ export async function GET(
         { error: 'Unauthorized' },
         { status: 401 }
       )
+    }
+
+    // Rate limiting
+    const rateLimitResult = await rateLimit(req, "GET", userId)
+    if (!rateLimitResult.success) {
+      const response = NextResponse.json(
+        { 
+          error: 'Too many requests',
+          message: 'Rate limit exceeded. Please try again later.',
+        },
+        { status: 429 }
+      )
+      addRateLimitHeaders(response.headers, rateLimitResult.limit, rateLimitResult.remaining, rateLimitResult.reset)
+      return response
     }
 
     const resolvedParams = params instanceof Promise ? await params : params
@@ -80,7 +96,9 @@ export async function GET(
       ],
     })
 
-    return NextResponse.json({ tasks })
+    const response = NextResponse.json({ tasks })
+    addRateLimitHeaders(response.headers, rateLimitResult.limit, rateLimitResult.remaining, rateLimitResult.reset)
+    return response
   } catch (error) {
     console.error('Error fetching tasks:', error)
     return NextResponse.json(
@@ -105,6 +123,20 @@ export async function POST(
         { error: 'Unauthorized' },
         { status: 401 }
       )
+    }
+
+    // Rate limiting
+    const rateLimitResult = await rateLimit(req, "POST", userId)
+    if (!rateLimitResult.success) {
+      const response = NextResponse.json(
+        {
+          error: 'Too many requests',
+          message: 'Rate limit exceeded. Please try again later.',
+        },
+        { status: 429 }
+      )
+      addRateLimitHeaders(response.headers, rateLimitResult.limit, rateLimitResult.remaining, rateLimitResult.reset)
+      return response
     }
 
     const resolvedParams = params instanceof Promise ? await params : params
@@ -145,8 +177,14 @@ export async function POST(
       )
     }
 
-    // Parse request body
-    const body = await req.json()
+    // Validate request body
+    const validation = await validateRequest(req, createTaskSchema)
+    if (validation.error) {
+      return NextResponse.json(
+        formatZodError(validation.error),
+        { status: 400 }
+      )
+    }
     const {
       name,
       description,
@@ -155,31 +193,7 @@ export async function POST(
       priority,
       status,
       dueDate,
-    } = body
-
-    // Validate required fields
-    if (!name || !name.trim()) {
-      return NextResponse.json(
-        { error: 'Task name is required' },
-        { status: 400 }
-      )
-    }
-
-    // Validate priority
-    if (priority && !['LOW', 'MEDIUM', 'HIGH', 'URGENT'].includes(priority)) {
-      return NextResponse.json(
-        { error: 'Invalid priority' },
-        { status: 400 }
-      )
-    }
-
-    // Validate status
-    if (status && !['TODO', 'DONE', 'CANCELLED', 'DUE'].includes(status)) {
-      return NextResponse.json(
-        { error: 'Invalid status' },
-        { status: 400 }
-      )
-    }
+    } = validation.data
 
     // Get team to get patient name if not provided
     const team = await prisma.careTeam.findUnique({
@@ -245,7 +259,9 @@ export async function POST(
       },
     })
 
-    return NextResponse.json({ task }, { status: 201 })
+    const response = NextResponse.json({ task }, { status: 201 })
+    addRateLimitHeaders(response.headers, rateLimitResult.limit, rateLimitResult.remaining, rateLimitResult.reset)
+    return response
   } catch (error) {
     console.error('Error creating task:', error)
     return NextResponse.json(

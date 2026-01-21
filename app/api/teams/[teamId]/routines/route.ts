@@ -1,7 +1,9 @@
 import { auth } from '@clerk/nextjs/server'
 import { prisma } from '@/lib/prisma'
 import { NextResponse } from 'next/server'
+import { createRoutineSchema, validateRequest, formatZodError } from '@/lib/validations'
 import { TaskPriority, RecurrenceType } from '@prisma/client'
+import { rateLimit, addRateLimitHeaders } from '@/lib/rate-limit'
 
 export async function GET(
   req: Request,
@@ -15,6 +17,20 @@ export async function GET(
         { error: 'Unauthorized' },
         { status: 401 }
       )
+    }
+
+    // Rate limiting
+    const rateLimitResult = await rateLimit(req, "GET", userId)
+    if (!rateLimitResult.success) {
+      const response = NextResponse.json(
+        {
+          error: 'Too many requests',
+          message: 'Rate limit exceeded. Please try again later.',
+        },
+        { status: 429 }
+      )
+      addRateLimitHeaders(response.headers, rateLimitResult.limit, rateLimitResult.remaining, rateLimitResult.reset)
+      return response
     }
 
     const resolvedParams = params instanceof Promise ? await params : params
@@ -83,7 +99,9 @@ export async function GET(
       ],
     })
 
-    return NextResponse.json({ routines })
+    const response = NextResponse.json({ routines })
+    addRateLimitHeaders(response.headers, rateLimitResult.limit, rateLimitResult.remaining, rateLimitResult.reset)
+    return response
   } catch (error) {
     console.error('Error fetching routines:', error)
     console.error('Error details:', error instanceof Error ? error.stack : String(error))
@@ -121,6 +139,20 @@ export async function POST(
         { error: 'Unauthorized' },
         { status: 401 }
       )
+    }
+
+    // Rate limiting
+    const rateLimitResult = await rateLimit(req, "POST", userId)
+    if (!rateLimitResult.success) {
+      const response = NextResponse.json(
+        {
+          error: 'Too many requests',
+          message: 'Rate limit exceeded. Please try again later.',
+        },
+        { status: 429 }
+      )
+      addRateLimitHeaders(response.headers, rateLimitResult.limit, rateLimitResult.remaining, rateLimitResult.reset)
+      return response
     }
 
     const resolvedParams = params instanceof Promise ? await params : params
@@ -162,7 +194,14 @@ export async function POST(
       )
     }
 
-    const body = await req.json()
+    // Validate request body
+    const validation = await validateRequest(req, createRoutineSchema)
+    if (validation.error) {
+      return NextResponse.json(
+        formatZodError(validation.error),
+        { status: 400 }
+      )
+    }
     const {
       name,
       description,
@@ -171,24 +210,10 @@ export async function POST(
       recurrenceDaysOfWeek, // [0,1,2,3,4,5,6] for daily, etc.
       startDate,
       endDate,
-    } = body
+    } = validation.data
 
-    // Validate required fields
-    if (!name || !name.trim()) {
-      return NextResponse.json(
-        { error: 'Name is required' },
-        { status: 400 }
-      )
-    }
-
-    if (!checklistItems || !Array.isArray(checklistItems) || checklistItems.length === 0) {
-      return NextResponse.json(
-        { error: 'At least one checklist item (question) is required' },
-        { status: 400 }
-      )
-    }
-
-    if (!recurrenceDaysOfWeek || !Array.isArray(recurrenceDaysOfWeek) || recurrenceDaysOfWeek.length === 0) {
+    // Additional validation for recurrenceDaysOfWeek (already validated by schema but double-check)
+    if (!recurrenceDaysOfWeek || recurrenceDaysOfWeek.length === 0) {
       return NextResponse.json(
         { error: 'At least one day of week is required' },
         { status: 400 }
@@ -257,7 +282,9 @@ export async function POST(
       },
     })
 
-    return NextResponse.json({ routine }, { status: 201 })
+    const response = NextResponse.json({ routine }, { status: 201 })
+    addRateLimitHeaders(response.headers, rateLimitResult.limit, rateLimitResult.remaining, rateLimitResult.reset)
+    return response
   } catch (error) {
     console.error('Error creating routine:', error)
     return NextResponse.json(

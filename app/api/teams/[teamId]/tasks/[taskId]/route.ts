@@ -2,6 +2,8 @@ import { auth } from '@clerk/nextjs/server'
 import { prisma } from '@/lib/prisma'
 import { NextResponse } from 'next/server'
 import { TaskPriority, TaskStatus } from '@prisma/client'
+import { updateTaskSchema, validateRequest, formatZodError } from '@/lib/validations'
+import { rateLimit, addRateLimitHeaders } from '@/lib/rate-limit'
 
 export async function PATCH(
   req: Request,
@@ -70,8 +72,14 @@ export async function PATCH(
       )
     }
 
-    // Parse request body
-    const body = await req.json()
+    // Validate request body
+    const validation = await validateRequest(req, updateTaskSchema)
+    if (validation.error) {
+      return NextResponse.json(
+        formatZodError(validation.error),
+        { status: 400 }
+      )
+    }
     const {
       name,
       description,
@@ -80,23 +88,7 @@ export async function PATCH(
       priority,
       status,
       dueDate,
-    } = body
-
-    // Validate priority if provided
-    if (priority && !['LOW', 'MEDIUM', 'HIGH', 'URGENT'].includes(priority)) {
-      return NextResponse.json(
-        { error: 'Invalid priority' },
-        { status: 400 }
-      )
-    }
-
-    // Validate status if provided
-    if (status && !['TODO', 'DONE', 'CANCELLED', 'DUE'].includes(status)) {
-      return NextResponse.json(
-        { error: 'Invalid status' },
-        { status: 400 }
-      )
-    }
+    } = validation.data
 
     // Update task
     const updatedTask = await prisma.task.update({
@@ -134,7 +126,9 @@ export async function PATCH(
       },
     })
 
-    return NextResponse.json({ task: updatedTask })
+    const response = NextResponse.json({ task: updatedTask })
+    addRateLimitHeaders(response.headers, rateLimitResult.limit, rateLimitResult.remaining, rateLimitResult.reset)
+    return response
   } catch (error) {
     console.error('Error updating task:', error)
     return NextResponse.json(
@@ -159,6 +153,20 @@ export async function DELETE(
         { error: 'Unauthorized' },
         { status: 401 }
       )
+    }
+
+    // Rate limiting (sensitive operation)
+    const rateLimitResult = await rateLimit(req, "DELETE", userId)
+    if (!rateLimitResult.success) {
+      const response = NextResponse.json(
+        { 
+          error: 'Too many requests',
+          message: 'Rate limit exceeded. Please try again later.',
+        },
+        { status: 429 }
+      )
+      addRateLimitHeaders(response.headers, rateLimitResult.limit, rateLimitResult.remaining, rateLimitResult.reset)
+      return response
     }
 
     const resolvedParams = params instanceof Promise ? await params : params

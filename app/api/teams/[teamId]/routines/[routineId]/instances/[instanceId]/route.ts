@@ -1,6 +1,7 @@
 import { auth } from '@clerk/nextjs/server'
 import { prisma } from '@/lib/prisma'
 import { NextResponse } from 'next/server'
+import { updateRoutineInstanceSchema, validateRequest, formatZodError } from '@/lib/validations'
 
 export async function PATCH(
   req: Request,
@@ -73,8 +74,15 @@ export async function PATCH(
       )
     }
 
-    const body = await req.json()
-    const { answers, notes } = body
+    // Validate request body
+    const validation = await validateRequest(req, updateRoutineInstanceSchema)
+    if (validation.error) {
+      return NextResponse.json(
+        formatZodError(validation.error),
+        { status: 400 }
+      )
+    }
+    const { answers, completedItems, skippedItems, notes } = validation.data
 
     // Update instance
     const updatedInstance = await prisma.routineInstance.update({

@@ -3,6 +3,7 @@
 import * as React from "react"
 import { motion, useReducedMotion } from "framer-motion"
 import { useTeamStore } from "@/store/use-team-store"
+import { useDataStore, type Task, type TeamData } from "@/store/use-data-store"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent } from "@/components/ui/card"
@@ -36,58 +37,19 @@ import { Plus, Search, Filter, Calendar, User, CheckCircle2, XCircle, Clock, Ale
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { toast } from "sonner"
 
-interface Task {
-  id: string
-  name: string
-  description?: string | null
-  patientName?: string | null
-  priority: "LOW" | "MEDIUM" | "HIGH" | "URGENT"
-  status: "TODO" | "DONE" | "CANCELLED" | "DUE"
-  dueDate?: string | null
-  createdAt: string
-  updatedAt: string
-  createdBy: {
-    id: string
-    name: string | null
-    firstName: string | null
-    lastName: string | null
-    email: string
-    imageUrl: string | null
-  }
-  assignedTo?: {
-    id: string
-    name: string | null
-    firstName: string | null
-    lastName: string | null
-    email: string
-    imageUrl: string | null
-  } | null
-}
-
-interface TeamData {
-  team: {
-    id: string
-    name: string
-    patientId?: string | null
-  }
-  members: Array<{
-    id: string
-    name: string
-    email: string
-  }>
-  currentUser: {
-    id: string
-    isAdmin: boolean
-    accessLevel: string
-  }
-}
-
 export default function TasksPage() {
   const { activeTeam } = useTeamStore()
-  const [tasks, setTasks] = React.useState<Task[]>([])
-  const [teamData, setTeamData] = React.useState<TeamData | null>(null)
-  const [loading, setLoading] = React.useState(true)
-  const [error, setError] = React.useState<string | null>(null)
+  const {
+    tasks: tasksFromStore,
+    teamData: teamDataFromStore,
+    fetchTasks,
+    fetchTeamData,
+    addTask,
+    updateTask,
+    removeTask,
+    loading,
+    errors
+  } = useDataStore()
   const [formOpen, setFormOpen] = React.useState(false)
   const [editingTask, setEditingTask] = React.useState<Task | null>(null)
   const [deleteDialogOpen, setDeleteDialogOpen] = React.useState(false)
@@ -129,40 +91,58 @@ export default function TasksPage() {
   const shouldReduceMotion = useReducedMotion()
   const shouldAnimate = !shouldReduceMotion
 
-  // Fetch team data and tasks
+  // Fetch team data and tasks on mount and when team changes
   React.useEffect(() => {
-    const fetchData = async () => {
-      if (!activeTeam) {
-        setError("No active team selected")
-        setLoading(false)
-        return
-      }
+    if (!activeTeam) return
 
+    const loadData = async () => {
       try {
-        // Fetch team members for form
-        const teamResponse = await fetch(`/api/teams/${activeTeam.id}/members`)
-        if (teamResponse.ok) {
-          const teamData = await teamResponse.json()
-          setTeamData(teamData)
-        }
-
-        // Fetch tasks from API
-        const tasksResponse = await fetch(`/api/teams/${activeTeam.id}/tasks`)
-        if (!tasksResponse.ok) {
-          throw new Error("Failed to load tasks")
-        }
-        const data = await tasksResponse.json()
-        setTasks(data.tasks || [])
+        await Promise.all([
+          fetchTasks(activeTeam.id),
+          fetchTeamData(activeTeam.id),
+        ])
       } catch (error) {
-        console.error("Error fetching data:", error)
-        setError("Failed to load tasks")
-      } finally {
-        setLoading(false)
+        console.error("Error loading tasks/team data:", error)
       }
     }
 
-    fetchData()
-  }, [activeTeam])
+    loadData()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTeam?.id]) // Only depend on team ID, not the functions
+
+  // Get tasks and team data from store
+  const tasks = React.useMemo(() => {
+    if (!activeTeam) return []
+    const storedTasks = tasksFromStore[activeTeam.id]
+    return Array.isArray(storedTasks) ? storedTasks : []
+  }, [tasksFromStore, activeTeam])
+  
+  const teamData = React.useMemo(() => {
+    if (!activeTeam) return null
+    return teamDataFromStore[activeTeam.id] || null
+  }, [teamDataFromStore, activeTeam])
+
+  // Get loading/error states - only show loading if actively fetching AND no data
+  const isLoading = React.useMemo(() => {
+    if (!activeTeam) return false
+    
+    const hasAnyData = 
+      (tasksFromStore[activeTeam.id] !== undefined) ||
+      (teamDataFromStore[activeTeam.id] !== undefined)
+    
+    // If we have any data, don't show loading
+    if (hasAnyData) {
+      return false
+    }
+    
+    // Only show loading if we're actively fetching and have no data
+    return loading[`tasks-${activeTeam.id}`] || loading[`teamData-${activeTeam.id}`]
+  }, [loading, activeTeam, tasksFromStore, teamDataFromStore])
+
+  const error = React.useMemo(() => {
+    if (!activeTeam) return "No active team selected"
+    return errors[`tasks-${activeTeam.id}`] || errors[`teamData-${activeTeam.id}`] || null
+  }, [errors, activeTeam])
 
   // Filter tasks
   const filteredTasks = React.useMemo(() => {
@@ -226,8 +206,12 @@ export default function TasksPage() {
   const handleDeleteConfirm = async () => {
     if (!activeTeam || !taskToDelete) return
 
+    // Optimistic update
+    const taskId = taskToDelete.id
+    removeTask(activeTeam.id, taskId)
+
     try {
-      const response = await fetch(`/api/teams/${activeTeam.id}/tasks/${taskToDelete.id}`, {
+      const response = await fetch(`/api/teams/${activeTeam.id}/tasks/${taskId}`, {
         method: "DELETE",
       })
 
@@ -239,25 +223,20 @@ export default function TasksPage() {
       setDeleteDialogOpen(false)
       setTaskToDelete(null)
       
-      // Refresh tasks
-      const tasksResponse = await fetch(`/api/teams/${activeTeam.id}/tasks`)
-      if (tasksResponse.ok) {
-        const data = await tasksResponse.json()
-        setTasks(data.tasks || [])
-      }
+      // Refresh tasks to ensure consistency
+      await fetchTasks(activeTeam.id, true) // Force refresh
     } catch (error) {
       console.error("Error deleting task:", error)
       toast.error("Failed to delete task")
+      // Revert optimistic update on error
+      await fetchTasks(activeTeam.id, true)
     }
   }
 
-  const handleFormSuccess = () => {
+  const handleFormSuccess = async () => {
     // Refresh tasks
     if (activeTeam) {
-      fetch(`/api/teams/${activeTeam.id}/tasks`)
-        .then((res) => res.json())
-        .then((data) => setTasks(data.tasks || []))
-        .catch((err) => console.error("Error refreshing tasks:", err))
+      await fetchTasks(activeTeam.id, true) // Force refresh
     }
   }
 
@@ -268,11 +247,8 @@ export default function TasksPage() {
 
     const newStatus = checked ? "DONE" : "TODO"
     
-    // Optimistically update UI
-    const updatedTasks = tasks.map((t) =>
-      t.id === task.id ? { ...t, status: newStatus as Task["status"] } : t
-    )
-    setTasks(updatedTasks)
+    // Optimistic update
+    updateTask(activeTeam.id, task.id, { status: newStatus })
 
     try {
       const response = await fetch(`/api/teams/${activeTeam.id}/tasks/${task.id}`, {
@@ -286,16 +262,12 @@ export default function TasksPage() {
       }
 
       // Refresh tasks to get latest data
-      const tasksResponse = await fetch(`/api/teams/${activeTeam.id}/tasks`)
-      if (tasksResponse.ok) {
-        const data = await tasksResponse.json()
-        setTasks(data.tasks || [])
-      }
+      await fetchTasks(activeTeam.id, true) // Force refresh
     } catch (error) {
       console.error("Error updating task status:", error)
       toast.error("Failed to update task status")
-      // Revert optimistic update
-      setTasks(tasks)
+      // Revert optimistic update on error
+      await fetchTasks(activeTeam.id, true)
     }
   }
 
@@ -325,11 +297,8 @@ export default function TasksPage() {
       return
     }
 
-    // Optimistically update UI
-    const updatedTasks = tasks.map((task) =>
-      task.id === draggedTask.id ? { ...task, status: newStatus as Task["status"] } : task
-    )
-    setTasks(updatedTasks)
+    // Optimistic update
+    updateTask(activeTeam.id, draggedTask.id, { status: newStatus as Task["status"] })
 
     try {
       const response = await fetch(`/api/teams/${activeTeam.id}/tasks/${draggedTask.id}`, {
@@ -343,16 +312,12 @@ export default function TasksPage() {
       }
 
       // Refresh tasks to get latest data
-      const tasksResponse = await fetch(`/api/teams/${activeTeam.id}/tasks`)
-      if (tasksResponse.ok) {
-        const data = await tasksResponse.json()
-        setTasks(data.tasks || [])
-      }
+      await fetchTasks(activeTeam.id, true) // Force refresh
     } catch (error) {
       console.error("Error updating task status:", error)
       toast.error("Failed to update task status")
-      // Revert optimistic update
-      setTasks(tasks)
+      // Revert optimistic update on error
+      await fetchTasks(activeTeam.id, true)
     } finally {
       setDraggedTask(null)
     }
@@ -598,7 +563,7 @@ export default function TasksPage() {
     return task.status
   }
 
-  if (loading) {
+  if (isLoading) {
     return (
       <div className="flex items-center justify-center h-full">
         <div className="text-center">
