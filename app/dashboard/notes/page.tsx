@@ -3,6 +3,7 @@
 import * as React from "react"
 import { motion, useReducedMotion } from "framer-motion"
 import { useTeamStore } from "@/store/use-team-store"
+import { useDataStore, type Note, type TeamData } from "@/store/use-data-store"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent } from "@/components/ui/card"
@@ -30,82 +31,21 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 
-interface Note {
-  id: string
-  title: string
-  content: string
-  createdAt: string
-  updatedAt: string
-  createdBy: {
-    id: string
-    name: string | null
-    firstName: string | null
-    lastName: string | null
-    email: string
-    imageUrl: string | null
-  }
-  lastEditedBy?: {
-    id: string
-    name: string | null
-    firstName: string | null
-    lastName: string | null
-    email: string
-    imageUrl: string | null
-  } | null
-  editors: Array<{
-    id: string
-    user: {
-      id: string
-      name: string | null
-      firstName: string | null
-      lastName: string | null
-      email: string
-      imageUrl: string | null
-    }
-  }>
-  viewers: Array<{
-    id: string
-    user: {
-      id: string
-      name: string | null
-      firstName: string | null
-      lastName: string | null
-      email: string
-      imageUrl: string | null
-    }
-  }>
-  canEdit: boolean
-  canDelete: boolean
-  userRole: "creator" | "editor" | "viewer"
-}
-
-interface TeamMember {
-  id: string
-  name: string
-  email: string
-  imageUrl?: string | null
-}
-
-interface TeamData {
-  team: {
-    id: string
-    name: string
-  }
-  members: TeamMember[]
-  currentUser: {
-    id: string
-    isAdmin: boolean
-    accessLevel: string
-  }
-}
-
 export default function NotesPage() {
   const { activeTeam } = useTeamStore()
+  const { 
+    notes: notesFromStore, 
+    teamData: teamDataFromStore,
+    fetchNotes, 
+    fetchTeamData,
+    addNote,
+    removeNote,
+    loading,
+    errors
+  } = useDataStore()
   const router = useRouter()
-  const [notes, setNotes] = React.useState<Note[]>([])
-  const [teamData, setTeamData] = React.useState<TeamData | null>(null)
-  const [loading, setLoading] = React.useState(true)
-  const [error, setError] = React.useState<string | null>(null)
+  
+  // UI state (component-specific)
   const [searchQuery, setSearchQuery] = React.useState("")
   const [formOpen, setFormOpen] = React.useState(false)
   const [deleteDialogOpen, setDeleteDialogOpen] = React.useState(false)
@@ -120,38 +60,78 @@ export default function NotesPage() {
   const shouldReduceMotion = useReducedMotion()
   const shouldAnimate = !shouldReduceMotion
 
-  // Fetch notes and team data
+  // Fetch notes and team data on mount and when team changes
   React.useEffect(() => {
-    const fetchData = async () => {
-      if (!activeTeam) {
-        setError("No active team selected")
-        setLoading(false)
-        return
-      }
+    if (!activeTeam) return
 
+    const loadData = async () => {
       try {
-        const teamResponse = await fetch(`/api/teams/${activeTeam.id}/members`)
-        if (teamResponse.ok) {
-          const teamData = await teamResponse.json()
-          setTeamData(teamData)
-        }
-
-        const notesResponse = await fetch(`/api/teams/${activeTeam.id}/notes`)
-        if (!notesResponse.ok) {
-          throw new Error("Failed to load notes")
-        }
-        const data = await notesResponse.json()
-        setNotes(data.notes || [])
+        await Promise.all([
+          fetchNotes(activeTeam.id),
+          fetchTeamData(activeTeam.id),
+        ])
       } catch (error) {
-        console.error("Error fetching data:", error)
-        setError("Failed to load notes")
-      } finally {
-        setLoading(false)
+        console.error("Error loading notes/team data:", error)
       }
     }
 
-    fetchData()
-  }, [activeTeam])
+    loadData()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTeam?.id]) // Only depend on team ID, not the functions
+
+  // Get notes and team data from store
+  const notes = React.useMemo(() => {
+    if (!activeTeam) return []
+    const storedNotes = notesFromStore[activeTeam.id]
+    return Array.isArray(storedNotes) ? storedNotes : []
+  }, [notesFromStore, activeTeam])
+  
+  const teamData = React.useMemo(() => {
+    if (!activeTeam) return null
+    return teamDataFromStore[activeTeam.id] || null
+  }, [teamDataFromStore, activeTeam])
+
+  // Get loading/error states - only show loading if actively fetching AND no data
+  const isLoading = React.useMemo(() => {
+    if (!activeTeam) return false
+    
+    const notesKey = `notes-${activeTeam.id}`
+    const teamDataKey = `teamData-${activeTeam.id}`
+    
+    // Check if data exists (even empty arrays count as data)
+    const hasNotes = notesFromStore[activeTeam.id] !== undefined
+    const hasTeamData = teamDataFromStore[activeTeam.id] !== undefined
+    
+    // If we have any data, don't show loading
+    if (hasNotes || hasTeamData) {
+      return false
+    }
+    
+    // Only show loading if we're actively fetching and have no data
+    const isNotesLoading = loading[notesKey] === true
+    const isTeamDataLoading = loading[teamDataKey] === true
+    
+    return isNotesLoading || isTeamDataLoading
+  }, [loading, activeTeam, notesFromStore, teamDataFromStore])
+  
+  // Add a timeout to prevent infinite loading
+  React.useEffect(() => {
+    if (!isLoading || !activeTeam) return
+    
+    const timeout = setTimeout(() => {
+      console.error("Notes page loading timeout - forcing refresh")
+      // Force refresh after 10 seconds
+      fetchNotes(activeTeam.id, true)
+      fetchTeamData(activeTeam.id, true)
+    }, 10000) // 10 second timeout
+    
+    return () => clearTimeout(timeout)
+  }, [isLoading, activeTeam, fetchNotes, fetchTeamData])
+
+  const error = React.useMemo(() => {
+    if (!activeTeam) return "No active team selected"
+    return errors[`notes-${activeTeam.id}`] || errors[`teamData-${activeTeam.id}`] || null
+  }, [errors, activeTeam])
 
   const handleCreateNote = () => {
     if (!teamData || teamData.currentUser.accessLevel !== "FULL") {
@@ -189,6 +169,11 @@ export default function NotesPage() {
         throw new Error("Failed to create note")
       }
 
+      const newNote = await response.json()
+      
+      // Add to store optimistically
+      addNote(activeTeam.id, newNote)
+
       toast.success("Note created successfully")
       setFormOpen(false)
       setTitle("")
@@ -196,24 +181,28 @@ export default function NotesPage() {
       setSelectedEditorIds([])
       setSelectedViewerIds([])
 
-      // Refresh notes
-      const notesResponse = await fetch(`/api/teams/${activeTeam.id}/notes`)
-      if (notesResponse.ok) {
-        const data = await notesResponse.json()
-        setNotes(data.notes || [])
-      }
+      // Refresh notes to get full data with permissions
+      await fetchNotes(activeTeam.id, true) // Force refresh
     } catch (error) {
       console.error("Error creating note:", error)
       toast.error("Failed to create note")
+      // Remove optimistic update on error
+      if (activeTeam) {
+        await fetchNotes(activeTeam.id, true)
+      }
     }
   }
 
   const handleDeleteNote = async () => {
     if (!activeTeam || !noteToDelete) return
 
+    // Optimistic update
+    const noteId = noteToDelete.id
+    removeNote(activeTeam.id, noteId)
+
     try {
       const response = await fetch(
-        `/api/teams/${activeTeam.id}/notes/${noteToDelete.id}`,
+        `/api/teams/${activeTeam.id}/notes/${noteId}`,
         {
           method: "DELETE",
         }
@@ -227,15 +216,13 @@ export default function NotesPage() {
       setDeleteDialogOpen(false)
       setNoteToDelete(null)
 
-      // Refresh notes
-      const notesResponse = await fetch(`/api/teams/${activeTeam.id}/notes`)
-      if (notesResponse.ok) {
-        const data = await notesResponse.json()
-        setNotes(data.notes || [])
-      }
+      // Refresh notes to ensure consistency
+      await fetchNotes(activeTeam.id, true) // Force refresh
     } catch (error) {
       console.error("Error deleting note:", error)
       toast.error("Failed to delete note")
+      // Revert optimistic update on error
+      await fetchNotes(activeTeam.id, true)
     }
   }
 
@@ -273,10 +260,13 @@ export default function NotesPage() {
     )
   }
 
-  if (loading) {
+  if (isLoading) {
     return (
       <div className="flex items-center justify-center h-full">
-        <Spinner className="h-8 w-8" />
+        <div className="text-center">
+          <Spinner className="h-8 w-8 mx-auto mb-4" />
+          <p className="text-sm text-muted-foreground">Loading notes...</p>
+        </div>
       </div>
     )
   }

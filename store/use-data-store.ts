@@ -237,14 +237,31 @@ export const useDataStore = create<DataStore>()(
         const timestamp = state.teamDataTimestamp[teamId] || 0
         const now = Date.now()
         
-        if (!force && cached && (now - timestamp) < state.teamDataCacheTTL) {
+        // Check if we have valid cached data
+        const hasValidCache = cached !== null && cached !== undefined && (now - timestamp) < state.teamDataCacheTTL
+        
+        if (!force && hasValidCache) {
+          // Ensure loading is false when using cache
+          if (state.loading[key]) {
+            set({ loading: { ...state.loading, [key]: false } })
+          }
           return cached
         }
         
+        // Set loading state before fetching
         set({ loading: { ...state.loading, [key]: true }, errors: { ...state.errors, [key]: null } })
         
         try {
-          const response = await fetch(`/api/teams/${teamId}/members`)
+          // Add timeout to prevent hanging
+          const controller = new AbortController()
+          const timeoutId = setTimeout(() => controller.abort(), 15000) // 15 second timeout
+          
+          const response = await fetch(`/api/teams/${teamId}/members`, {
+            signal: controller.signal
+          })
+          
+          clearTimeout(timeoutId)
+          
           if (!response.ok) throw new Error('Failed to fetch team data')
           const data = await response.json()
           
@@ -263,6 +280,7 @@ export const useDataStore = create<DataStore>()(
             errors: { ...state.errors, [key]: errorMessage },
           })
           console.error('Error fetching team data:', error)
+          // Return cached data if available, even if stale
           return cached || null
         }
       },
@@ -371,14 +389,31 @@ export const useDataStore = create<DataStore>()(
         const timestamp = state.notesTimestamp[teamId] || 0
         const now = Date.now()
         
-        if (!force && cached && (now - timestamp) < state.notesCacheTTL) {
+        // Check if we have valid cached data
+        const hasValidCache = cached !== undefined && Array.isArray(cached) && (now - timestamp) < state.notesCacheTTL
+        
+        if (!force && hasValidCache) {
+          // Ensure loading is false when using cache
+          if (state.loading[key]) {
+            set({ loading: { ...state.loading, [key]: false } })
+          }
           return cached
         }
         
+        // Set loading state before fetching
         set({ loading: { ...state.loading, [key]: true }, errors: { ...state.errors, [key]: null } })
         
         try {
-          const response = await fetch(`/api/teams/${teamId}/notes`)
+          // Add timeout to prevent hanging
+          const controller = new AbortController()
+          const timeoutId = setTimeout(() => controller.abort(), 15000) // 15 second timeout
+          
+          const response = await fetch(`/api/teams/${teamId}/notes`, {
+            signal: controller.signal
+          })
+          
+          clearTimeout(timeoutId)
+          
           if (!response.ok) throw new Error('Failed to fetch notes')
           const data = await response.json()
           const notes = data.notes || []
@@ -398,6 +433,7 @@ export const useDataStore = create<DataStore>()(
             errors: { ...state.errors, [key]: errorMessage },
           })
           console.error('Error fetching notes:', error)
+          // Return cached data if available, even if stale
           return cached || []
         }
       },
