@@ -25,7 +25,7 @@ export function InsightsPreview({ insights }: InsightsPreviewProps) {
   const shouldReduceMotion = useReducedMotion()
   const shouldAnimate = !shouldReduceMotion
 
-  // Show only the first insight
+  // Show only the first insight (micro-payoff)
   const insight = insights[0]
 
   if (!insight) {

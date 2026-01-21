@@ -47,12 +47,12 @@ export function WelcomeHeader({
     {
       label: "Note",
       icon: FileText,
-      onClick: onAddNote || (() => {}),
+      onClick: onAddNote || (() => {router.push("/dashboard/notes")}),
     },
     {
       label: "Care Plan",
       icon: ClipboardList,
-      onClick: onViewCarePlan || (() => {}),
+      onClick: onViewCarePlan || (() => {router.push("/dashboard/care-plan")}),
     },
   ]
 

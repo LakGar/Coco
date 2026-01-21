@@ -144,6 +144,11 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       ],
     },
     {
+      title: "Notes",
+      url: "/dashboard/notes",
+      icon: FileText,
+    },
+    {
       title: "Care Team",
       url: "/dashboard/team",
       icon: Users,

@@ -75,7 +75,13 @@ export function UpcomingTasksPreview({
       const isWithinNextWeek = dueDateStart.getTime() <= nextWeek.getTime()
       
       return isAfterToday && isWithinNextWeek
-    }).slice(0, 4) // Max 4 tasks
+    })
+    // Limit to 3 max, prioritize by due date (soonest first)
+    .sort((a, b) => {
+      if (!a.dueDate || !b.dueDate) return 0
+      return new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime()
+    })
+    .slice(0, 3) // Max 3 tasks - protect this limit
   }, [tasks])
 
   // Always show the section, even if empty

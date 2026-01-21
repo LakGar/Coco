@@ -49,7 +49,7 @@ export function CarePlanPreview({ onViewCarePlan }: CarePlanPreviewProps) {
           </div>
           <div className="space-y-3">
             <div className="text-sm text-muted-foreground">
-              View and manage the care plan for this patient, including treatment goals, medications, and care instructions.
+              This is our shared understanding of care goals, medications, and important instructions. Read-only for easy reference.
             </div>
             <div className="flex items-center gap-2 text-xs text-muted-foreground">
               <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/30"></span>

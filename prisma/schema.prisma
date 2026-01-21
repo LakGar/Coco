@@ -99,6 +99,18 @@ model User {
   // moods logged by this user
   loggedMoods Mood[] @relation("LoggedMoods")
 
+  // notes created by this user
+  createdNotes Note[] @relation("CreatedNotes")
+
+  // notes this user can edit
+  editableNotes NoteEditor[] @relation("NoteEditors")
+
+  // notes this user can view
+  viewableNotes NoteViewer[] @relation("NoteViewers")
+
+  // notes last edited by this user
+  lastEditedNotes Note[] @relation("LastEditedNotes")
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
@@ -116,6 +128,7 @@ model CareTeam {
   tasks    Task[]
   routines Routine[]
   moods    Mood[]
+  notes    Note[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -278,4 +291,63 @@ model Mood {
   @@index([loggedById])
   @@index([observedAt])
   @@index([rating])
+}
+
+model Note {
+  id        String  @id @default(cuid())
+  teamId    String
+  team      CareTeam @relation(fields: [teamId], references: [id])
+
+  // Note content
+  title   String
+  content String
+
+  // Who created this note
+  createdById String
+  createdBy   User   @relation("CreatedNotes", fields: [createdById], references: [id])
+
+  // Last person who edited
+  lastEditedById String?
+  lastEditedBy   User?   @relation("LastEditedNotes", fields: [lastEditedById], references: [id])
+
+  // Permissions - editors and viewers
+  editors NoteEditor[] @relation("NoteEditors")
+  viewers NoteViewer[] @relation("NoteViewers")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([teamId])
+  @@index([createdById])
+  @@index([updatedAt])
+}
+
+model NoteEditor {
+  id     String @id @default(cuid())
+  noteId String
+  note   Note   @relation("NoteEditors", fields: [noteId], references: [id], onDelete: Cascade)
+
+  userId String
+  user   User   @relation("NoteEditors", fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@unique([noteId, userId])
+  @@index([noteId])
+  @@index([userId])
+}
+
+model NoteViewer {
+  id     String @id @default(cuid())
+  noteId String
+  note   Note   @relation("NoteViewers", fields: [noteId], references: [id], onDelete: Cascade)
+
+  userId String
+  user   User   @relation("NoteViewers", fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@unique([noteId, userId])
+  @@index([noteId])
+  @@index([userId])
 }

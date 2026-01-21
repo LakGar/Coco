@@ -51,26 +51,34 @@ export function TodaySummaryCard({
     }
   }
 
+  // Ensure we have valid numbers
+  const safeRoutinesScheduled = typeof routinesScheduled === 'number' ? routinesScheduled : 0
+  const safeTasksDue = typeof tasksDue === 'number' ? tasksDue : 0
+  const safeJournalFilled = typeof journalFilled === 'boolean' ? journalFilled : false
+
   const items = [
     {
       icon: Calendar,
-      label: `${routinesScheduled} routine${routinesScheduled === 1 ? "" : "s"} scheduled`,
+      label: `${safeRoutinesScheduled} routine${safeRoutinesScheduled === 1 ? "" : "s"} scheduled`,
       onClick: handleRoutinesClick,
       color: "text-blue-600",
+      show: true,
     },
     {
       icon: CheckCircle2,
-      label: `${tasksDue} task${tasksDue === 1 ? "" : "s"} due`,
+      label: `${safeTasksDue} task${safeTasksDue === 1 ? "" : "s"} due`,
       onClick: handleTasksClick,
       color: "text-emerald-600",
+      show: true,
     },
     {
       icon: BookOpen,
-      label: journalFilled ? "Journal filled" : "Journal not filled yet",
+      label: safeJournalFilled ? "Journal filled" : "Journal not filled yet",
       onClick: handleJournalClick,
-      color: journalFilled ? "text-emerald-600" : "text-amber-600",
+      color: safeJournalFilled ? "text-emerald-600" : "text-amber-600",
+      show: safeRoutinesScheduled > 0, // Only show journal status if there are routines scheduled
     },
-  ]
+  ].filter((item) => item.show)
 
   return (
     <motion.div

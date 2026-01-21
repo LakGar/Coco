@@ -2,6 +2,7 @@
 
 import * as React from "react"
 import { useTeamStore } from "@/store/use-team-store"
+import { useDataStore, type Task, type Routine, type Mood } from "@/store/use-data-store"
 import { Spinner } from "@/components/ui/spinner"
 import { Card, CardContent } from "@/components/ui/card"
 import { MoodCard } from "@/components/mood-card"
@@ -19,62 +20,52 @@ import { NightlyJournalModal } from "@/components/nightly-journal-modal"
 import { format, isToday, isPast, startOfDay } from "date-fns"
 import { useRouter } from "next/navigation"
 
-interface Task {
-  id: string
-  name: string
-  dueDate?: string | null
-  status: "TODO" | "DONE" | "CANCELLED" | "DUE"
-  priority: "LOW" | "MEDIUM" | "HIGH" | "URGENT"
-  createdAt: string
-  createdBy: {
-    id: string
-    name: string | null
-    firstName: string | null
-    lastName: string | null
-    imageUrl: string | null
-  }
-}
-
-interface Routine {
-  id: string
-  name: string
-  isActive: boolean
-  recurrenceDaysOfWeek: number[]
-  instances?: Array<{
-    id: string
-    entryDate: string
-    answers?: Record<string, boolean>
-    notes?: string | null
-    filledOutAt?: string
-  }>
-}
-
-interface Mood {
-  id: string
-  rating: "CALM" | "CONTENT" | "NEUTRAL" | "RELAXED" | "SAD" | "WITHDRAWN" | "TIRED" | "ANXIOUS" | "IRRITABLE" | "RESTLESS" | "CONFUSED"
-  notes?: string | null
-  observedAt: string
-  loggedBy: {
-    id: string
-    name: string | null
-    firstName: string | null
-    lastName: string | null
-    imageUrl: string | null
-  }
-}
+// Types are now imported from use-data-store
 
 export default function DashboardPage() {
   const { activeTeam } = useTeamStore()
   const router = useRouter()
-  const [loading, setLoading] = React.useState(true)
-  const [error, setError] = React.useState<string | null>(null)
+  
+  // Use Zustand store for data
+  const {
+    tasks: allTasksFromStore,
+    routines: routinesFromStore,
+    moods: moodsFromStore,
+    fetchTasks,
+    fetchRoutines,
+    fetchMoods,
+    updateTask,
+    loading,
+    errors,
+  } = useDataStore()
 
-  // Data state
-  const [tasks, setTasks] = React.useState<Task[]>([])
-  const [allTasks, setAllTasks] = React.useState<Task[]>([])
-  const [routines, setRoutines] = React.useState<Routine[]>([])
-  const [moods, setMoods] = React.useState<Mood[]>([])
-  const [latestMood, setLatestMood] = React.useState<Mood | null>(null)
+  // Get data for current team
+  const allTasks = React.useMemo(() => {
+    return activeTeam ? (allTasksFromStore[activeTeam.id] || []) : []
+  }, [allTasksFromStore, activeTeam])
+
+  const routines = React.useMemo(() => {
+    return activeTeam ? (routinesFromStore[activeTeam.id] || []) : []
+  }, [routinesFromStore, activeTeam])
+
+  const moods = React.useMemo(() => {
+    return activeTeam ? (moodsFromStore[activeTeam.id] || []) : []
+  }, [moodsFromStore, activeTeam])
+
+  const latestMood = React.useMemo(() => {
+    return moods.length > 0 ? moods[0] : null
+  }, [moods])
+
+  // Filter tasks for today + overdue
+  const tasks = React.useMemo(() => {
+    const today = startOfDay(new Date())
+    return allTasks.filter((task: Task) => {
+      if (task.status === "DONE" || task.status === "CANCELLED") return false
+      if (!task.dueDate) return false
+      const dueDate = new Date(task.dueDate)
+      return isToday(dueDate) || isPast(dueDate)
+    })
+  }, [allTasks])
 
   // UI state
   const [taskFormOpen, setTaskFormOpen] = React.useState(false)
@@ -82,78 +73,80 @@ export default function DashboardPage() {
   const [selectedRoutine, setSelectedRoutine] = React.useState<Routine | null>(null)
   const [lastJournalEntry, setLastJournalEntry] = React.useState<any>(null)
 
-  // Fetch all data
+  // Fetch all data on mount and when team changes
   React.useEffect(() => {
-    const fetchData = async () => {
-      if (!activeTeam) {
-        setLoading(false)
-        return
-      }
+    if (!activeTeam) return
 
-      try {
-        setLoading(true)
-        setError(null)
-
-        // Fetch all tasks
-        const tasksResponse = await fetch(`/api/teams/${activeTeam.id}/tasks`)
-        if (tasksResponse.ok) {
-          const tasksData = await tasksResponse.json()
-          const fetchedTasks = tasksData.tasks || []
-          setAllTasks(fetchedTasks)
-          
-          // Filter for today + overdue, not done
-          const today = startOfDay(new Date())
-          const todayTasks = fetchedTasks.filter((task: Task) => {
-            if (task.status === "DONE" || task.status === "CANCELLED") return false
-            if (!task.dueDate) return false
-            const dueDate = new Date(task.dueDate)
-            return isToday(dueDate) || isPast(dueDate)
-          })
-          
-          setTasks(todayTasks)
-        }
-
-        // Fetch routines
-        const routinesResponse = await fetch(`/api/teams/${activeTeam.id}/routines`)
-        if (routinesResponse.ok) {
-          const routinesData = await routinesResponse.json()
-          setRoutines(routinesData.routines || [])
-        }
-
-        // Fetch moods
-        const moodsResponse = await fetch(`/api/teams/${activeTeam.id}/moods`)
-        if (moodsResponse.ok) {
-          const moodsData = await moodsResponse.json()
-          setMoods(moodsData)
-          if (moodsData.length > 0) {
-            setLatestMood(moodsData[0])
-          }
-        }
-      } catch (error) {
-        console.error("Error fetching data:", error)
-        setError("Failed to load dashboard data")
-      } finally {
-        setLoading(false)
-      }
+    const loadData = async () => {
+      await Promise.all([
+        fetchTasks(activeTeam.id),
+        fetchRoutines(activeTeam.id),
+        fetchMoods(activeTeam.id),
+      ])
     }
 
-    fetchData()
-  }, [activeTeam])
+    loadData()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTeam?.id]) // Only depend on team ID, not the functions
+
+  // Get loading/error states - only show loading if actively fetching AND no data
+  const isLoading = React.useMemo(() => {
+    if (!activeTeam) return false
+    
+    const hasAnyData = 
+      (allTasksFromStore[activeTeam.id] !== undefined) ||
+      (routinesFromStore[activeTeam.id] !== undefined) ||
+      (moodsFromStore[activeTeam.id] !== undefined)
+    
+    // If we have any data, don't show loading
+    if (hasAnyData) {
+      return false
+    }
+    
+    // Only show loading if we're actively fetching and have no data
+    const isCurrentlyLoading = 
+      loading[`tasks-${activeTeam.id}`] ||
+      loading[`routines-${activeTeam.id}`] ||
+      loading[`moods-${activeTeam.id}`]
+    
+    return isCurrentlyLoading
+  }, [loading, activeTeam, allTasksFromStore, routinesFromStore, moodsFromStore])
+
+  const error = React.useMemo(() => {
+    if (!activeTeam) return null
+    return (
+      errors[`tasks-${activeTeam.id}`] ||
+      errors[`routines-${activeTeam.id}`] ||
+      errors[`moods-${activeTeam.id}`] ||
+      null
+    )
+  }, [errors, activeTeam])
 
   // Calculate today's summary
   const today = new Date()
   const dayOfWeek = today.getDay()
   
-  const routinesScheduled = routines.filter((r) => {
-    if (!r.isActive) return false
-    return r.recurrenceDaysOfWeek.includes(dayOfWeek)
-  }).length
+  const routinesScheduled = React.useMemo(() => {
+    if (!routines || routines.length === 0) return 0
+    const count = routines.filter((r) => {
+      if (!r.isActive) return false
+      if (!r.recurrenceDaysOfWeek || !Array.isArray(r.recurrenceDaysOfWeek) || r.recurrenceDaysOfWeek.length === 0) return false
+      return r.recurrenceDaysOfWeek.includes(dayOfWeek)
+    }).length
+    return count
+  }, [routines, dayOfWeek])
 
-  const tasksDue = tasks.length
+  const tasksDue = React.useMemo(() => {
+    if (!tasks || !Array.isArray(tasks)) return 0
+    return tasks.length
+  }, [tasks])
 
   const journalFilled = React.useMemo(() => {
+    if (!routines || routines.length === 0) return true
+    
     const todayRoutines = routines.filter((r) => {
       if (!r.isActive) return false
+      if (!r.recurrenceDaysOfWeek || !Array.isArray(r.recurrenceDaysOfWeek) || r.recurrenceDaysOfWeek.length === 0) return false
       return r.recurrenceDaysOfWeek.includes(dayOfWeek)
     })
 
@@ -161,9 +154,15 @@ export default function DashboardPage() {
 
     const todayStr = format(today, "yyyy-MM-dd")
     return todayRoutines.some((r) => {
-      return r.instances?.some((inst) => {
-        const entryDate = format(new Date(inst.entryDate), "yyyy-MM-dd")
-        return entryDate === todayStr
+      if (!r.instances || !Array.isArray(r.instances) || r.instances.length === 0) return false
+      return r.instances.some((inst) => {
+        if (!inst.entryDate) return false
+        try {
+          const entryDate = format(new Date(inst.entryDate), "yyyy-MM-dd")
+          return entryDate === todayStr
+        } catch (e) {
+          return false
+        }
       })
     })
   }, [routines, dayOfWeek, today])
@@ -190,28 +189,82 @@ export default function DashboardPage() {
       message: string
     }> = []
 
-    // Mood insights
-    if (moods.length >= 3) {
+    // Mood insights - micro-payoff insights
+    if (moods.length >= 2) {
       const recentMoods = moods.slice(0, 7)
-      const goodMoods = recentMoods.filter(
-        (m) => m.rating === "GOOD" || m.rating === "VERY_GOOD"
-      ).length
-      const poorMoods = recentMoods.filter(
-        (m) => m.rating === "VERY_POOR" || m.rating === "POOR"
-      ).length
+      const today = new Date()
+      const todayStr = format(today, "yyyy-MM-dd")
+      
+      // Check for today's mood
+      const todayMood = recentMoods.find((m) => {
+        const moodDate = format(new Date(m.observedAt), "yyyy-MM-dd")
+        return moodDate === todayStr
+      })
 
-      if (poorMoods > goodMoods) {
-        insightsList.push({
-          id: "mood-trend",
-          type: "mood",
-          message: "Mood appears lower than usual this week",
-        })
-      } else if (goodMoods > poorMoods) {
-        insightsList.push({
-          id: "mood-positive",
-          type: "mood",
-          message: "Mood has been more positive recently",
-        })
+      // Positive moods
+      const positiveMoods = recentMoods.filter(
+        (m) => m.rating === "CALM" || m.rating === "CONTENT" || m.rating === "RELAXED"
+      )
+      
+      // Low moods
+      const lowMoods = recentMoods.filter(
+        (m) => m.rating === "SAD" || m.rating === "WITHDRAWN" || m.rating === "TIRED"
+      )
+      
+      // Agitated moods
+      const agitatedMoods = recentMoods.filter(
+        (m) => m.rating === "ANXIOUS" || m.rating === "IRRITABLE" || m.rating === "RESTLESS" || m.rating === "CONFUSED"
+      )
+
+      // Today-specific insights
+      if (todayMood) {
+        if (todayMood.rating === "CALM" || todayMood.rating === "CONTENT" || todayMood.rating === "RELAXED") {
+          insightsList.push({
+            id: "mood-today-positive",
+            type: "mood",
+            message: "No agitation logged today",
+          })
+        }
+      }
+
+      // Recent trend insights (past 2-3 days)
+      if (recentMoods.length >= 2) {
+        const lastTwo = recentMoods.slice(0, 2)
+        const bothPositive = lastTwo.every(
+          (m) => m.rating === "CALM" || m.rating === "CONTENT" || m.rating === "RELAXED"
+        )
+        const bothCalm = lastTwo.every((m) => m.rating === "CALM")
+
+        if (bothCalm) {
+          insightsList.push({
+            id: "mood-calm-streak",
+            type: "mood",
+            message: "Mood has been calmer the past 2 days",
+          })
+        } else if (bothPositive) {
+          insightsList.push({
+            id: "mood-positive-streak",
+            type: "mood",
+            message: "Mood has been more positive recently",
+          })
+        }
+      }
+
+      // Week trend
+      if (recentMoods.length >= 3) {
+        if (agitatedMoods.length === 0 && positiveMoods.length >= 2) {
+          insightsList.push({
+            id: "mood-week-positive",
+            type: "mood",
+            message: "No agitation noted this week",
+          })
+        } else if (agitatedMoods.length > positiveMoods.length) {
+          insightsList.push({
+            id: "mood-week-agitated",
+            type: "mood",
+            message: "More agitation noted earlier this week",
+          })
+        }
       }
     }
 
@@ -322,11 +375,7 @@ export default function DashboardPage() {
   const handleJournalSave = async () => {
     // Refresh routines to get updated instances
     if (activeTeam) {
-      const routinesResponse = await fetch(`/api/teams/${activeTeam.id}/routines`)
-      if (routinesResponse.ok) {
-        const routinesData = await routinesResponse.json()
-        setRoutines(routinesData.routines || [])
-      }
+      await fetchRoutines(activeTeam.id, true) // Force refresh
     }
     setJournalModalOpen(false)
   }
@@ -334,14 +383,7 @@ export default function DashboardPage() {
   const handleMoodTracked = async () => {
     // Refresh moods
     if (activeTeam) {
-      const moodsResponse = await fetch(`/api/teams/${activeTeam.id}/moods`)
-      if (moodsResponse.ok) {
-        const moodsData = await moodsResponse.json()
-        setMoods(moodsData)
-        if (moodsData.length > 0) {
-          setLatestMood(moodsData[0])
-        }
-      }
+      await fetchMoods(activeTeam.id, true) // Force refresh
     }
   }
 
@@ -349,6 +391,9 @@ export default function DashboardPage() {
     if (!activeTeam) return
 
     try {
+      // Optimistic update
+      updateTask(activeTeam.id, taskId, { status: "DONE" })
+
       const response = await fetch(`/api/teams/${activeTeam.id}/tasks/${taskId}`, {
         method: "PATCH",
         headers: {
@@ -357,14 +402,17 @@ export default function DashboardPage() {
         body: JSON.stringify({ status: "DONE" }),
       })
 
-      if (response.ok) {
-        // Optimistically update
-        setTasks((prev) =>
-          prev.map((t) => (t.id === taskId ? { ...t, status: "DONE" as const } : t))
-        )
+      if (!response.ok) {
+        // Revert on error
+        await fetchTasks(activeTeam.id, true)
+        throw new Error("Failed to complete task")
       }
     } catch (error) {
       console.error("Error completing task:", error)
+      // Refresh to get correct state
+      if (activeTeam) {
+        await fetchTasks(activeTeam.id, true)
+      }
     }
   }
 
@@ -380,7 +428,7 @@ export default function DashboardPage() {
     )
   }
 
-  if (loading) {
+  if (isLoading) {
     return (
       <div className="flex items-center justify-center h-full">
         <Spinner className="h-8 w-8" />
@@ -423,9 +471,9 @@ export default function DashboardPage() {
 
             {/* Today Summary */}
             <TodaySummaryCard
-              routinesScheduled={routinesScheduled}
-              tasksDue={tasksDue}
-              journalFilled={journalFilled}
+              routinesScheduled={routinesScheduled ?? 0}
+              tasksDue={tasksDue ?? 0}
+              journalFilled={journalFilled ?? false}
               onJournalClick={handleFillJournal}
             />
 
@@ -478,19 +526,7 @@ export default function DashboardPage() {
           setTaskFormOpen(false)
           // Refresh tasks
           if (activeTeam) {
-            fetch(`/api/teams/${activeTeam.id}/tasks`)
-              .then((res) => res.json())
-              .then((data) => {
-                const allTasks = data.tasks || []
-                const today = startOfDay(new Date())
-                const todayTasks = allTasks.filter((task: Task) => {
-                  if (task.status === "DONE" || task.status === "CANCELLED") return false
-                  if (!task.dueDate) return false
-                  const dueDate = new Date(task.dueDate)
-                  return isToday(dueDate) || isPast(dueDate)
-                })
-                setTasks(todayTasks)
-              })
+            fetchTasks(activeTeam.id, true) // Force refresh
           }
         }}
       />
