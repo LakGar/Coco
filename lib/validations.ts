@@ -56,17 +56,42 @@ export const updateRoutineSchema = z.object({
 // Note: Schema currently uses `answers` (Json), but we validate for both formats
 export const createRoutineInstanceSchema = z.object({
   entryDate: z.union([z.string().datetime(), z.string().date()]),
-  answers: z.record(z.boolean()).optional(), // Legacy format: { "question": true/false }
+  answers: z
+    .object({})
+    .catchall(z.unknown())
+    .optional(), // Legacy format: accepts any object with any values (will be coerced to boolean in API)
   completedItems: z.array(z.string().trim()).optional(), // New format
   skippedItems: z.array(z.string().trim()).optional(), // New format
-  notes: z.string().max(5000, "Notes must be less than 5000 characters").trim().nullable().optional(),
+  notes: z
+    .union([
+      z.string().max(5000, "Notes must be less than 5000 characters"),
+      z.literal(""),
+      z.null(),
+    ])
+    .optional(),
+})
+
+// Log schema creation for debugging
+console.log('[validations.ts] createRoutineInstanceSchema created:', {
+  schemaType: typeof createRoutineInstanceSchema,
+  hasParse: typeof createRoutineInstanceSchema?.parse === 'function',
+  schemaDef: (createRoutineInstanceSchema as any)?._def,
 })
 
 export const updateRoutineInstanceSchema = z.object({
-  answers: z.record(z.boolean()).optional(), // Legacy format
+  answers: z
+    .object({})
+    .catchall(z.unknown())
+    .optional(), // Legacy format: accepts any object with any values (will be coerced to boolean in API)
   completedItems: z.array(z.string().trim()).optional(), // New format
   skippedItems: z.array(z.string().trim()).optional(), // New format
-  notes: z.string().max(5000, "Notes must be less than 5000 characters").trim().nullable().optional(),
+  notes: z
+    .union([
+      z.string().max(5000, "Notes must be less than 5000 characters"),
+      z.literal(""),
+      z.null(),
+    ])
+    .optional(),
 })
 
 // Note validation schemas
@@ -122,25 +147,104 @@ export async function validateRequest<T>(
   schema: z.ZodSchema<T>
 ): Promise<{ data: T; error: null } | { data: null; error: z.ZodError }> {
   try {
-    const body = await request.json()
+    console.log('[validateRequest] ========== STARTING VALIDATION ==========')
+    console.log('[validateRequest] Schema type:', typeof schema)
+    console.log('[validateRequest] Schema is undefined:', schema === undefined)
+    console.log('[validateRequest] Schema is null:', schema === null)
+    console.log('[validateRequest] Schema:', schema)
+    console.log('[validateRequest] Schema._def:', (schema as any)?._def)
+    console.log('[validateRequest] Schema._def?.typeName:', (schema as any)?._def?.typeName)
+    console.log('[validateRequest] Schema._def?.shape:', (schema as any)?._def?.shape)
+    console.log('[validateRequest] Schema has parse method:', typeof schema?.parse === 'function')
+    console.log('[validateRequest] Schema parse method:', schema?.parse)
+    
+    // Try to get request body
+    let body
+    try {
+      body = await request.json()
+      console.log('[validateRequest] Request body parsed successfully from JSON')
+    } catch (parseError) {
+      console.error('[validateRequest] ERROR parsing JSON:', parseError)
+      console.error('[validateRequest] Parse error type:', typeof parseError)
+      console.error('[validateRequest] Parse error message:', parseError instanceof Error ? parseError.message : String(parseError))
+      throw new Error(`Failed to parse request body as JSON: ${parseError instanceof Error ? parseError.message : String(parseError)}`)
+    }
+    
+    console.log('[validateRequest] Request body received:', JSON.stringify(body, null, 2))
+    console.log('[validateRequest] Body type:', typeof body)
+    console.log('[validateRequest] Body is null:', body === null)
+    console.log('[validateRequest] Body is undefined:', body === undefined)
+    console.log('[validateRequest] Body keys:', body ? Object.keys(body) : 'N/A')
+    
+    if (!schema) {
+      console.error('[validateRequest] ERROR: Schema is undefined or null!')
+      throw new Error('Schema is undefined or null')
+    }
+    
+    if (typeof schema.parse !== 'function') {
+      console.error('[validateRequest] ERROR: schema.parse is not a function!')
+      console.error('[validateRequest] Schema object:', schema)
+      console.error('[validateRequest] Schema keys:', Object.keys(schema || {}))
+      throw new Error('Schema.parse is not a function')
+    }
+    
+    console.log('[validateRequest] About to call schema.parse with body:', body)
     const data = schema.parse(body)
+    console.log('[validateRequest] Validation successful!')
+    console.log('[validateRequest] Parsed data:', JSON.stringify(data, null, 2))
+    console.log('[validateRequest] ========== VALIDATION SUCCESS ==========')
     return { data, error: null }
   } catch (error) {
+    console.error('[validateRequest] ========== VALIDATION ERROR ==========')
+    console.error('[validateRequest] Error caught:', error)
+    console.error('[validateRequest] Error type:', typeof error)
+    console.error('[validateRequest] Error constructor:', error?.constructor?.name)
+    console.error('[validateRequest] Error instanceof ZodError:', error instanceof z.ZodError)
+    console.error('[validateRequest] Error instanceof Error:', error instanceof Error)
+    console.error('[validateRequest] Error message:', error instanceof Error ? error.message : 'No message')
+    console.error('[validateRequest] Error stack:', error instanceof Error ? error.stack : 'No stack')
+    
     if (error instanceof z.ZodError) {
+      console.error('[validateRequest] ZodError details:', {
+        issues: error.issues,
+        errors: error.errors,
+        issuesCount: error.issues?.length,
+      })
+      console.error('[validateRequest] ZodError issues (formatted):', JSON.stringify(error.issues, null, 2))
       return { data: null, error }
     }
+    
+    console.error('[validateRequest] Non-ZodError, re-throwing...')
     throw error
   }
 }
 
 // Helper function to format Zod errors for API responses
-export function formatZodError(error: z.ZodError): { message: string; issues: Array<{ path: string[]; message: string }> } {
+export function formatZodError(error: unknown): { message: string; issues: Array<{ path: string[]; message: string }> } {
+  // Type guard: check if it's a ZodError
+  if (error instanceof z.ZodError) {
+    // Safety check: ensure error.errors exists and is an array
+    if (error.errors && Array.isArray(error.errors)) {
+      return {
+        message: "Validation failed",
+        issues: error.errors.map((err) => ({
+          path: err.path,
+          message: err.message,
+        })),
+      }
+    }
+  }
+
+  // Fallback for non-Zod errors or malformed Zod errors
+  const errorMessage = error instanceof Error 
+    ? error.message 
+    : typeof error === 'string' 
+    ? error 
+    : "Unknown validation error"
+
   return {
     message: "Validation failed",
-    issues: error.errors.map((err) => ({
-      path: err.path,
-      message: err.message,
-    })),
+    issues: [{ path: [], message: errorMessage }],
   }
 }
 

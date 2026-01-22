@@ -84,12 +84,28 @@ export async function PATCH(
     }
     const { answers, completedItems, skippedItems, notes } = validation.data
 
+    // Process notes: trim if string, convert empty string to null
+    const processedNotes = notes && typeof notes === "string" && notes.trim() !== "" 
+      ? notes.trim() 
+      : notes === null || notes === "" 
+        ? null 
+        : notes
+
+    // Process answers: coerce string/number values to booleans
+    const processedAnswers = answers
+      ? Object.entries(answers).reduce((acc, [key, value]) => {
+          // Coerce to boolean: true, "true", 1 -> true; everything else -> false
+          acc[key] = value === true || value === "true" || value === 1
+          return acc
+        }, {} as Record<string, boolean>)
+      : undefined
+
     // Update instance
     const updatedInstance = await prisma.routineInstance.update({
       where: { id: instanceId },
       data: {
-        ...(answers !== undefined && { answers }),
-        ...(notes !== undefined && { notes: notes || null }),
+        ...(processedAnswers !== undefined && { answers: processedAnswers }),
+        ...(processedNotes !== undefined && { notes: processedNotes }),
         filledOutAt: new Date(),
         filledOutBy: user.id,
       },

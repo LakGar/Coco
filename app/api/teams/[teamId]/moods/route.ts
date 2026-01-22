@@ -3,6 +3,7 @@ import { auth } from "@clerk/nextjs/server"
 import { prisma } from "@/lib/prisma"
 import { getCurrentUser } from "@/lib/get-user"
 import { rateLimit, addRateLimitHeaders } from "@/lib/rate-limit"
+import { createMoodSchema, validateRequest, formatZodError } from "@/lib/validations"
 
 // GET /api/teams/[teamId]/moods - Get moods for a team
 export async function GET(
