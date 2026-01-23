@@ -6,6 +6,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@clerk/nextjs/server"
 import { rateLimit, addRateLimitHeaders } from "./rate-limit"
+import { loggerUtils } from "./logger"
 
 type RouteHandler = (
   req: NextRequest | Request,
@@ -58,7 +59,7 @@ export function withRateLimit(
       
       return response
     } catch (error) {
-      console.error("Rate limit wrapper error:", error)
+      loggerUtils.logError(error, { type: "rate_limit_wrapper_error", method })
       // If rate limiting fails, still call the handler (fail open)
       return handler(req, params)
     }

@@ -1,8 +1,9 @@
 import { Resend } from 'resend'
+import { log } from './logger'
 
 if (!process.env.RESEND_API_KEY) {
-  console.warn('RESEND_API_KEY is not set. Email sending will be disabled.')
-  console.warn('For testing, sign up at https://resend.com and add RESEND_API_KEY to .env.local')
+  log.warn({ type: "email_config_missing" }, 'RESEND_API_KEY is not set. Email sending will be disabled.')
+  log.warn({ type: "email_config_missing" }, 'For testing, sign up at https://resend.com and add RESEND_API_KEY to .env.local')
 }
 
 const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null
@@ -25,7 +26,7 @@ export async function sendInviteEmail({
   invitedName?: string
 }) {
   if (!resend) {
-    console.log('Email service not configured. Would send invite to:', to)
+    log.info({ type: "email_not_configured", to }, 'Email service not configured. Would send invite')
     return { success: false, error: 'Email service not configured' }
   }
 
@@ -49,13 +50,13 @@ export async function sendInviteEmail({
     })
 
     if (error) {
-      console.error('Error sending email:', error)
+      loggerUtils.logError(error, { type: "email_send_error", to, teamName })
       return { success: false, error }
     }
 
     return { success: true, data }
   } catch (error) {
-    console.error('Error sending email:', error)
+    loggerUtils.logError(error, { type: "email_send_error", to, teamName })
     return { success: false, error }
   }
 }

@@ -1,4 +1,5 @@
 import { z } from "zod"
+import { log, loggerUtils } from './logger'
 
 // Common validation schemas
 export const cuidSchema = z.string().cuid()
@@ -72,11 +73,11 @@ export const createRoutineInstanceSchema = z.object({
 })
 
 // Log schema creation for debugging
-console.log('[validations.ts] createRoutineInstanceSchema created:', {
+log.debug({
+  type: 'schema_creation',
   schemaType: typeof createRoutineInstanceSchema,
   hasParse: typeof createRoutineInstanceSchema?.parse === 'function',
-  schemaDef: (createRoutineInstanceSchema as any)?._def,
-})
+}, 'createRoutineInstanceSchema created')
 
 export const updateRoutineInstanceSchema = z.object({
   answers: z
@@ -147,74 +148,40 @@ export async function validateRequest<T>(
   schema: z.ZodSchema<T>
 ): Promise<{ data: T; error: null } | { data: null; error: z.ZodError }> {
   try {
-    console.log('[validateRequest] ========== STARTING VALIDATION ==========')
-    console.log('[validateRequest] Schema type:', typeof schema)
-    console.log('[validateRequest] Schema is undefined:', schema === undefined)
-    console.log('[validateRequest] Schema is null:', schema === null)
-    console.log('[validateRequest] Schema:', schema)
-    console.log('[validateRequest] Schema._def:', (schema as any)?._def)
-    console.log('[validateRequest] Schema._def?.typeName:', (schema as any)?._def?.typeName)
-    console.log('[validateRequest] Schema._def?.shape:', (schema as any)?._def?.shape)
-    console.log('[validateRequest] Schema has parse method:', typeof schema?.parse === 'function')
-    console.log('[validateRequest] Schema parse method:', schema?.parse)
+    log.debug({ type: 'validation_start' }, 'Starting request validation')
     
     // Try to get request body
     let body
     try {
       body = await request.json()
-      console.log('[validateRequest] Request body parsed successfully from JSON')
+      log.debug({ type: 'validation_parse' }, 'Request body parsed successfully')
     } catch (parseError) {
-      console.error('[validateRequest] ERROR parsing JSON:', parseError)
-      console.error('[validateRequest] Parse error type:', typeof parseError)
-      console.error('[validateRequest] Parse error message:', parseError instanceof Error ? parseError.message : String(parseError))
+      loggerUtils.logError(parseError, { type: 'validation_parse_error' })
       throw new Error(`Failed to parse request body as JSON: ${parseError instanceof Error ? parseError.message : String(parseError)}`)
     }
     
-    console.log('[validateRequest] Request body received:', JSON.stringify(body, null, 2))
-    console.log('[validateRequest] Body type:', typeof body)
-    console.log('[validateRequest] Body is null:', body === null)
-    console.log('[validateRequest] Body is undefined:', body === undefined)
-    console.log('[validateRequest] Body keys:', body ? Object.keys(body) : 'N/A')
+    log.debug({ type: 'validation_body', bodyKeys: body ? Object.keys(body) : [] }, 'Request body received')
     
     if (!schema) {
-      console.error('[validateRequest] ERROR: Schema is undefined or null!')
+      log.error({ type: 'validation_schema_error' }, 'Schema is undefined or null')
       throw new Error('Schema is undefined or null')
     }
     
     if (typeof schema.parse !== 'function') {
-      console.error('[validateRequest] ERROR: schema.parse is not a function!')
-      console.error('[validateRequest] Schema object:', schema)
-      console.error('[validateRequest] Schema keys:', Object.keys(schema || {}))
+      log.error({ type: 'validation_schema_error', schemaKeys: Object.keys(schema || {}) }, 'Schema.parse is not a function')
       throw new Error('Schema.parse is not a function')
     }
     
-    console.log('[validateRequest] About to call schema.parse with body:', body)
     const data = schema.parse(body)
-    console.log('[validateRequest] Validation successful!')
-    console.log('[validateRequest] Parsed data:', JSON.stringify(data, null, 2))
-    console.log('[validateRequest] ========== VALIDATION SUCCESS ==========')
+    log.debug({ type: 'validation_success' }, 'Validation successful')
     return { data, error: null }
   } catch (error) {
-    console.error('[validateRequest] ========== VALIDATION ERROR ==========')
-    console.error('[validateRequest] Error caught:', error)
-    console.error('[validateRequest] Error type:', typeof error)
-    console.error('[validateRequest] Error constructor:', error?.constructor?.name)
-    console.error('[validateRequest] Error instanceof ZodError:', error instanceof z.ZodError)
-    console.error('[validateRequest] Error instanceof Error:', error instanceof Error)
-    console.error('[validateRequest] Error message:', error instanceof Error ? error.message : 'No message')
-    console.error('[validateRequest] Error stack:', error instanceof Error ? error.stack : 'No stack')
-    
     if (error instanceof z.ZodError) {
-      console.error('[validateRequest] ZodError details:', {
-        issues: error.issues,
-        errors: error.errors,
-        issuesCount: error.issues?.length,
-      })
-      console.error('[validateRequest] ZodError issues (formatted):', JSON.stringify(error.issues, null, 2))
+      loggerUtils.logValidationError(error, { type: 'validation_zod_error' })
       return { data: null, error }
     }
     
-    console.error('[validateRequest] Non-ZodError, re-throwing...')
+    loggerUtils.logError(error, { type: 'validation_error' })
     throw error
   }
 }
@@ -233,14 +200,29 @@ export function formatZodError(error: unknown): { message: string; issues: Array
         })),
       }
     }
+    // If error.errors doesn't exist but we have error.message, use it
+    if (error.message) {
+      return {
+        message: "Validation failed",
+        issues: [{ path: [], message: error.message }],
+      }
+    }
   }
 
   // Fallback for non-Zod errors or malformed Zod errors
-  const errorMessage = error instanceof Error 
-    ? error.message 
-    : typeof error === 'string' 
-    ? error 
-    : "Unknown validation error"
+  // Check if error has a message property (even if not an Error instance)
+  let errorMessage = "Unknown validation error"
+  
+  if (error instanceof Error) {
+    errorMessage = error.message
+  } else if (error && typeof error === 'object' && 'message' in error) {
+    const msg = (error as any).message
+    if (typeof msg === 'string') {
+      errorMessage = msg
+    }
+  } else if (typeof error === 'string') {
+    errorMessage = error
+  }
 
   return {
     message: "Validation failed",

@@ -1,6 +1,7 @@
 /**
  * API helper utilities for consistent error handling and response parsing
  */
+import { loggerUtils } from './logger'
 
 export async function fetchWithErrorHandling<T>(
   url: string,
@@ -20,7 +21,7 @@ export async function fetchWithErrorHandling<T>(
     const data = await response.json()
     return { data, error: null }
   } catch (error) {
-    console.error('Fetch error:', error)
+    loggerUtils.logError(error, { type: "fetch_error", url })
     return {
       data: null,
       error: error instanceof Error ? error.message : 'Network error',

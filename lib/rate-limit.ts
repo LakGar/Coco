@@ -1,5 +1,6 @@
 import { Ratelimit } from "@upstash/ratelimit"
 import { Redis } from "@upstash/redis"
+import { log, loggerUtils } from "./logger"
 
 // Initialize Redis client
 // For production, use UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN
@@ -13,7 +14,7 @@ if (process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN) 
       token: process.env.UPSTASH_REDIS_REST_TOKEN,
     })
   } catch (error) {
-    console.warn("Failed to initialize Redis client:", error)
+    loggerUtils.logError(error, { type: "redis_init_error" })
   }
 }
 
@@ -111,7 +112,7 @@ export async function rateLimit(
 ): Promise<{ success: boolean; limit: number; remaining: number; reset: number }> {
   // Skip rate limiting if Redis is not configured (for local development)
   if (!process.env.UPSTASH_REDIS_REST_URL || !process.env.UPSTASH_REDIS_REST_TOKEN) {
-    console.warn("Rate limiting disabled: UPSTASH_REDIS_REST_URL or UPSTASH_REDIS_REST_TOKEN not set")
+    log.warn({ type: "rate_limit_disabled" }, "Rate limiting disabled: Redis credentials not set")
     return {
       success: true,
       limit: Infinity,
@@ -150,7 +151,7 @@ export async function rateLimit(
   } catch (error) {
     // If rate limiting fails, allow the request (fail open)
     // Log the error for monitoring
-    console.error("Rate limiting error:", error)
+    loggerUtils.logError(error, { type: "rate_limit_error", method, path: new URL(request.url).pathname })
     return {
       success: true,
       limit: Infinity,

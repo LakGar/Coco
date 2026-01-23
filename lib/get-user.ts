@@ -1,5 +1,6 @@
 import { auth } from '@clerk/nextjs/server'
 import { prisma } from './prisma'
+import { loggerUtils } from './logger'
 
 /**
  * Get the current user from the database using their Clerk ID
@@ -21,7 +22,7 @@ export async function getCurrentUser() {
 
     return user
   } catch (error) {
-    console.error('Error fetching user:', error)
+    loggerUtils.logError(error, { type: "get_user_error", clerkId: userId })
     return null
   }
 }
