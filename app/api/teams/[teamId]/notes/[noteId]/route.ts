@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server"
-import { auth } from "@clerk/nextjs/server"
 import { prisma } from "@/lib/prisma"
-import { getCurrentUser } from "@/lib/get-user"
-import { updateNoteSchema, validateRequest, formatZodError } from "@/lib/validations"
+import { updateNoteSchema, validateRequest } from "@/lib/validations"
+import { requireTeamAccess, extractTeamId, isAuthError } from "@/lib/auth-middleware"
+import { createValidationErrorResponse, createNotFoundErrorResponse, createInternalErrorResponse } from "@/lib/error-handler"
 
 // GET /api/teams/[teamId]/notes/[noteId] - Get a specific note
 export async function GET(
@@ -10,29 +10,16 @@ export async function GET(
   { params }: { params: { teamId: string; noteId: string } | Promise<{ teamId: string; noteId: string }> }
 ) {
   try {
-    const { userId } = await auth()
-    if (!userId) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-    }
-
+    // Extract teamId and check authorization
     const resolvedParams = params instanceof Promise ? await params : params
     const { teamId, noteId } = resolvedParams
-    const user = await getCurrentUser()
-    if (!user) {
-      return NextResponse.json({ error: "User not found" }, { status: 404 })
+    const authResult = await requireTeamAccess(teamId, "READ_ONLY") // Read operations allow READ_ONLY
+
+    if (isAuthError(authResult)) {
+      return authResult.response
     }
 
-    // Check if user is a member of this team
-    const membership = await prisma.careTeamMember.findFirst({
-      where: {
-        teamId,
-        userId: user.id,
-      },
-    })
-
-    if (!membership) {
-      return NextResponse.json({ error: "Not a team member" }, { status: 403 })
-    }
+    const { user } = authResult
 
     // Get note and check permissions
     const note = await prisma.note.findFirst({
@@ -98,7 +85,12 @@ export async function GET(
     })
 
     if (!note) {
-      return NextResponse.json({ error: "Note not found" }, { status: 404 })
+      return createNotFoundErrorResponse("Note not found", {
+        endpoint: "/api/teams/[teamId]/notes/[noteId]",
+        method: "GET",
+        teamId,
+        noteId,
+      })
     }
 
     const isCreator = note.createdById === user.id
@@ -111,11 +103,13 @@ export async function GET(
       userRole: isCreator ? "creator" : isEditor ? "editor" : "viewer",
     })
   } catch (error) {
-    console.error("Error fetching note:", error)
-    return NextResponse.json(
-      { error: "Failed to fetch note" },
-      { status: 500 }
-    )
+    const resolvedParams = params instanceof Promise ? await params : params
+    const { teamId } = resolvedParams
+    return createInternalErrorResponse(error, {
+      endpoint: "/api/teams/[teamId]/notes/[noteId]",
+      method: "GET",
+      teamId,
+    })
   }
 }
 
@@ -125,29 +119,16 @@ export async function PATCH(
   { params }: { params: { teamId: string; noteId: string } | Promise<{ teamId: string; noteId: string }> }
 ) {
   try {
-    const { userId } = await auth()
-    if (!userId) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-    }
-
+    // Extract teamId and check authorization
     const resolvedParams = params instanceof Promise ? await params : params
     const { teamId, noteId } = resolvedParams
-    const user = await getCurrentUser()
-    if (!user) {
-      return NextResponse.json({ error: "User not found" }, { status: 404 })
+    const authResult = await requireTeamAccess(teamId, "READ_ONLY") // Need team membership, but note permissions checked separately
+
+    if (isAuthError(authResult)) {
+      return authResult.response
     }
 
-    // Check if user is a member of this team
-    const membership = await prisma.careTeamMember.findFirst({
-      where: {
-        teamId,
-        userId: user.id,
-      },
-    })
-
-    if (!membership) {
-      return NextResponse.json({ error: "Not a team member" }, { status: 403 })
-    }
+    const { user } = authResult
 
     // Check if user can edit this note
     const note = await prisma.note.findFirst({
@@ -162,19 +143,23 @@ export async function PATCH(
     })
 
     if (!note) {
-      return NextResponse.json(
-        { error: "Note not found or you don't have permission to edit" },
-        { status: 404 }
-      )
+      return createNotFoundErrorResponse("Note not found or you don't have permission to edit", {
+        endpoint: "/api/teams/[teamId]/notes/[noteId]",
+        method: "PATCH",
+        teamId,
+        noteId,
+      })
     }
 
     // Validate request body
     const validation = await validateRequest(request, updateNoteSchema)
     if (validation.error) {
-      return NextResponse.json(
-        formatZodError(validation.error),
-        { status: 400 }
-      )
+      return createValidationErrorResponse(validation.error, {
+        endpoint: "/api/teams/[teamId]/notes/[noteId]",
+        method: "PATCH",
+        teamId,
+        noteId,
+      })
     }
     const { title, content } = validation.data
 
@@ -238,13 +223,24 @@ export async function PATCH(
       },
     })
 
-    return NextResponse.json(updatedNote)
+    // Calculate permissions (same logic as GET endpoint)
+    const isCreator = updatedNote.createdById === user.id
+    const isEditor = updatedNote.editors.some((e) => e.userId === user.id)
+
+    return NextResponse.json({
+      ...updatedNote,
+      canEdit: isCreator || isEditor,
+      canDelete: isCreator,
+      userRole: isCreator ? "creator" : isEditor ? "editor" : "viewer",
+    })
   } catch (error) {
-    console.error("Error updating note:", error)
-    return NextResponse.json(
-      { error: "Failed to update note" },
-      { status: 500 }
-    )
+    const resolvedParams = params instanceof Promise ? await params : params
+    const { teamId } = resolvedParams
+    return createInternalErrorResponse(error, {
+      endpoint: "/api/teams/[teamId]/notes/[noteId]",
+      method: "PATCH",
+      teamId,
+    })
   }
 }
 
@@ -254,17 +250,16 @@ export async function DELETE(
   { params }: { params: { teamId: string; noteId: string } | Promise<{ teamId: string; noteId: string }> }
 ) {
   try {
-    const { userId } = await auth()
-    if (!userId) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-    }
-
+    // Extract teamId and check authorization
     const resolvedParams = params instanceof Promise ? await params : params
     const { teamId, noteId } = resolvedParams
-    const user = await getCurrentUser()
-    if (!user) {
-      return NextResponse.json({ error: "User not found" }, { status: 404 })
+    const authResult = await requireTeamAccess(teamId, "READ_ONLY") // Need team membership, but note permissions checked separately
+
+    if (isAuthError(authResult)) {
+      return authResult.response
     }
+
+    const { user } = authResult
 
     // Check if user is the creator of this note
     const note = await prisma.note.findFirst({
@@ -276,10 +271,12 @@ export async function DELETE(
     })
 
     if (!note) {
-      return NextResponse.json(
-        { error: "Note not found or you don't have permission to delete" },
-        { status: 404 }
-      )
+      return createNotFoundErrorResponse("Note not found or you don't have permission to delete", {
+        endpoint: "/api/teams/[teamId]/notes/[noteId]",
+        method: "DELETE",
+        teamId,
+        noteId,
+      })
     }
 
     // Delete note (cascade will handle editors and viewers)
@@ -289,11 +286,13 @@ export async function DELETE(
 
     return NextResponse.json({ success: true })
   } catch (error) {
-    console.error("Error deleting note:", error)
-    return NextResponse.json(
-      { error: "Failed to delete note" },
-      { status: 500 }
-    )
+    const resolvedParams = params instanceof Promise ? await params : params
+    const { teamId } = resolvedParams
+    return createInternalErrorResponse(error, {
+      endpoint: "/api/teams/[teamId]/notes/[noteId]",
+      method: "DELETE",
+      teamId,
+    })
   }
 }
 

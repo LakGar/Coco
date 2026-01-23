@@ -1,60 +1,40 @@
-import { auth } from '@clerk/nextjs/server'
 import { prisma } from '@/lib/prisma'
 import { NextResponse } from 'next/server'
 import { TaskPriority, TaskStatus } from '@prisma/client'
 import { updateTaskSchema, validateRequest, formatZodError } from '@/lib/validations'
 import { rateLimit, addRateLimitHeaders } from '@/lib/rate-limit'
+import { requireTeamAccess, isAuthError } from '@/lib/auth-middleware'
+import { createValidationErrorResponse, createNotFoundErrorResponse, createInternalErrorResponse } from '@/lib/error-handler'
 
 export async function PATCH(
   req: Request,
   { params }: { params: { teamId: string; taskId: string } | Promise<{ teamId: string; taskId: string }> }
 ) {
   try {
-    const { userId } = await auth()
-
-    if (!userId) {
-      return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      )
-    }
-
+    // Extract params and check authorization (requires FULL access for write operations)
     const resolvedParams = params instanceof Promise ? await params : params
     const { teamId, taskId } = resolvedParams
 
-    // Get user from database
-    const user = await prisma.user.findUnique({
-      where: { clerkId: userId },
-    })
+    const authResult = await requireTeamAccess(teamId, 'FULL')
 
-    if (!user) {
-      return NextResponse.json(
-        { error: 'User not found' },
-        { status: 404 }
-      )
+    if (isAuthError(authResult)) {
+      return authResult.response
     }
 
-    // Verify user is a member of this team
-    const membership = await prisma.careTeamMember.findFirst({
-      where: {
-        teamId: teamId,
-        userId: user.id,
-      },
-    })
+    const { user } = authResult
 
-    if (!membership) {
-      return NextResponse.json(
-        { error: 'Not a member of this team' },
-        { status: 403 }
+    // Rate limiting
+    const rateLimitResult = await rateLimit(req, "PATCH", user.clerkId || user.id)
+    if (!rateLimitResult.success) {
+      const response = NextResponse.json(
+        {
+          error: 'Too many requests',
+          message: 'Rate limit exceeded. Please try again later.',
+        },
+        { status: 429 }
       )
-    }
-
-    // Check if user has permission to update tasks (not READ_ONLY)
-    if (membership.accessLevel === 'READ_ONLY') {
-      return NextResponse.json(
-        { error: 'Read-only users cannot update tasks' },
-        { status: 403 }
-      )
+      addRateLimitHeaders(response.headers, rateLimitResult.limit, rateLimitResult.remaining, rateLimitResult.reset)
+      return response
     }
 
     // Find the task
@@ -66,19 +46,25 @@ export async function PATCH(
     })
 
     if (!task) {
-      return NextResponse.json(
-        { error: 'Task not found' },
-        { status: 404 }
-      )
+      return createNotFoundErrorResponse('Task', {
+        endpoint: '/api/teams/[teamId]/tasks/[taskId]',
+        method: 'PATCH',
+        teamId,
+        taskId,
+        userId: user.id,
+      })
     }
 
     // Validate request body
     const validation = await validateRequest(req, updateTaskSchema)
     if (validation.error) {
-      return NextResponse.json(
-        formatZodError(validation.error),
-        { status: 400 }
-      )
+      return createValidationErrorResponse(validation.error, {
+        endpoint: '/api/teams/[teamId]/tasks/[taskId]',
+        method: 'PATCH',
+        teamId,
+        taskId,
+        userId: user.id,
+      })
     }
     const {
       name,
@@ -130,14 +116,13 @@ export async function PATCH(
     addRateLimitHeaders(response.headers, rateLimitResult.limit, rateLimitResult.remaining, rateLimitResult.reset)
     return response
   } catch (error) {
-    console.error('Error updating task:', error)
-    return NextResponse.json(
-      {
-        error: 'Error updating task',
-        details: error instanceof Error ? error.message : String(error),
-      },
-      { status: 500 }
-    )
+    const resolvedParams = params instanceof Promise ? await params : params
+    return createInternalErrorResponse(error, {
+      endpoint: '/api/teams/[teamId]/tasks/[taskId]',
+      method: 'PATCH',
+      teamId: resolvedParams.teamId,
+      taskId: resolvedParams.taskId,
+    })
   }
 }
 
@@ -146,17 +131,20 @@ export async function DELETE(
   { params }: { params: { teamId: string; taskId: string } | Promise<{ teamId: string; taskId: string }> }
 ) {
   try {
-    const { userId } = await auth()
+    // Extract params and check authorization (requires FULL access for delete operations)
+    const resolvedParams = params instanceof Promise ? await params : params
+    const { teamId, taskId } = resolvedParams
 
-    if (!userId) {
-      return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      )
+    const authResult = await requireTeamAccess(teamId, 'FULL')
+
+    if (isAuthError(authResult)) {
+      return authResult.response
     }
 
+    const { user } = authResult
+
     // Rate limiting (sensitive operation)
-    const rateLimitResult = await rateLimit(req, "DELETE", userId)
+    const rateLimitResult = await rateLimit(req, "DELETE", user.clerkId || user.id)
     if (!rateLimitResult.success) {
       const response = NextResponse.json(
         { 
@@ -169,44 +157,6 @@ export async function DELETE(
       return response
     }
 
-    const resolvedParams = params instanceof Promise ? await params : params
-    const { teamId, taskId } = resolvedParams
-
-    // Get user from database
-    const user = await prisma.user.findUnique({
-      where: { clerkId: userId },
-    })
-
-    if (!user) {
-      return NextResponse.json(
-        { error: 'User not found' },
-        { status: 404 }
-      )
-    }
-
-    // Verify user is a member of this team
-    const membership = await prisma.careTeamMember.findFirst({
-      where: {
-        teamId: teamId,
-        userId: user.id,
-      },
-    })
-
-    if (!membership) {
-      return NextResponse.json(
-        { error: 'Not a member of this team' },
-        { status: 403 }
-      )
-    }
-
-    // Check if user has permission to delete tasks (not READ_ONLY)
-    if (membership.accessLevel === 'READ_ONLY') {
-      return NextResponse.json(
-        { error: 'Read-only users cannot delete tasks' },
-        { status: 403 }
-      )
-    }
-
     // Find the task
     const task = await prisma.task.findFirst({
       where: {
@@ -216,10 +166,13 @@ export async function DELETE(
     })
 
     if (!task) {
-      return NextResponse.json(
-        { error: 'Task not found' },
-        { status: 404 }
-      )
+      return createNotFoundErrorResponse('Task', {
+        endpoint: '/api/teams/[teamId]/tasks/[taskId]',
+        method: 'DELETE',
+        teamId,
+        taskId,
+        userId: user.id,
+      })
     }
 
     // Delete task
@@ -229,14 +182,13 @@ export async function DELETE(
 
     return NextResponse.json({ success: true })
   } catch (error) {
-    console.error('Error deleting task:', error)
-    return NextResponse.json(
-      {
-        error: 'Error deleting task',
-        details: error instanceof Error ? error.message : String(error),
-      },
-      { status: 500 }
-    )
+    const resolvedParams = params instanceof Promise ? await params : params
+    return createInternalErrorResponse(error, {
+      endpoint: '/api/teams/[teamId]/tasks/[taskId]',
+      method: 'DELETE',
+      teamId: resolvedParams.teamId,
+      taskId: resolvedParams.taskId,
+    })
   }
 }
 

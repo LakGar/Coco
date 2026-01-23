@@ -1,51 +1,38 @@
-import { auth } from '@clerk/nextjs/server'
 import { prisma } from '@/lib/prisma'
 import { NextResponse } from 'next/server'
-import { updateRoutineSchema, validateRequest, formatZodError } from '@/lib/validations'
+import { updateRoutineSchema, validateRequest } from '@/lib/validations'
 import { rateLimit, addRateLimitHeaders } from '@/lib/rate-limit'
+import { requireTeamAccess, extractTeamId, isAuthError } from '@/lib/auth-middleware'
+import { createValidationErrorResponse, createNotFoundErrorResponse, createInternalErrorResponse } from '@/lib/error-handler'
 
 export async function PATCH(
   req: Request,
   { params }: { params: { teamId: string; routineId: string } | Promise<{ teamId: string; routineId: string }> }
 ) {
   try {
-    const { userId } = await auth()
-
-    if (!userId) {
-      return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      )
-    }
-
+    // Extract teamId and check authorization (FULL access required)
     const resolvedParams = params instanceof Promise ? await params : params
     const { teamId, routineId } = resolvedParams
+    const authResult = await requireTeamAccess(teamId, "FULL")
 
-    // Get user from database
-    const user = await prisma.user.findUnique({
-      where: { clerkId: userId },
-    })
-
-    if (!user) {
-      return NextResponse.json(
-        { error: 'User not found' },
-        { status: 404 }
-      )
+    if (isAuthError(authResult)) {
+      return authResult.response
     }
 
-    // Verify user is a member of this team
-    const membership = await prisma.careTeamMember.findFirst({
-      where: {
-        teamId: teamId,
-        userId: user.id,
-      },
-    })
+    const { user } = authResult
 
-    if (!membership) {
-      return NextResponse.json(
-        { error: 'Not a member of this team' },
-        { status: 403 }
+    // Rate limiting
+    const rateLimitResult = await rateLimit(req, "PATCH", user.clerkId || user.id)
+    if (!rateLimitResult.success) {
+      const response = NextResponse.json(
+        {
+          error: 'Too many requests',
+          message: 'Rate limit exceeded. Please try again later.',
+        },
+        { status: 429 }
       )
+      addRateLimitHeaders(response.headers, rateLimitResult.limit, rateLimitResult.remaining, rateLimitResult.reset)
+      return response
     }
 
     // Verify routine exists and belongs to team
@@ -66,10 +53,12 @@ export async function PATCH(
     // Validate request body
     const validation = await validateRequest(req, updateRoutineSchema)
     if (validation.error) {
-      return NextResponse.json(
-        formatZodError(validation.error),
-        { status: 400 }
-      )
+      return createValidationErrorResponse(validation.error, {
+        endpoint: "/api/teams/[teamId]/routines/[routineId]",
+        method: "PATCH",
+        teamId,
+        routineId,
+      })
     }
     const {
       name,
@@ -94,7 +83,6 @@ export async function PATCH(
         ...(recurrenceDaysOfWeek !== undefined && { recurrenceDaysOfWeek }),
         ...(startDate !== undefined && { startDate: new Date(startDate) }),
         ...(endDate !== undefined && { endDate: endDate ? new Date(endDate) : null }),
-        ...(isActive !== undefined && { isActive }),
       },
       include: {
         createdBy: {
@@ -114,14 +102,13 @@ export async function PATCH(
     addRateLimitHeaders(response.headers, rateLimitResult.limit, rateLimitResult.remaining, rateLimitResult.reset)
     return response
   } catch (error) {
-    console.error('Error updating routine:', error)
-    return NextResponse.json(
-      {
-        error: 'Error updating routine',
-        details: error instanceof Error ? error.message : String(error),
-      },
-      { status: 500 }
-    )
+    const resolvedParams = params instanceof Promise ? await params : params
+    const { teamId } = resolvedParams
+    return createInternalErrorResponse(error, {
+      endpoint: "/api/teams/[teamId]/routines/[routineId]",
+      method: "PATCH",
+      teamId,
+    })
   }
 }
 
@@ -130,52 +117,29 @@ export async function DELETE(
   { params }: { params: { teamId: string; routineId: string } | Promise<{ teamId: string; routineId: string }> }
 ) {
   try {
-    const { userId } = await auth()
-
-    if (!userId) {
-      return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      )
-    }
-
+    // Extract teamId and check authorization (FULL access required for deleting)
     const resolvedParams = params instanceof Promise ? await params : params
     const { teamId, routineId } = resolvedParams
+    const authResult = await requireTeamAccess(teamId, "FULL")
 
-    // Get user from database
-    const user = await prisma.user.findUnique({
-      where: { clerkId: userId },
-    })
-
-    if (!user) {
-      return NextResponse.json(
-        { error: 'User not found' },
-        { status: 404 }
-      )
+    if (isAuthError(authResult)) {
+      return authResult.response
     }
 
-    // Verify user is a member of this team
-    const membership = await prisma.careTeamMember.findFirst({
-      where: {
-        teamId: teamId,
-        userId: user.id,
-      },
-    })
+    const { user } = authResult
 
-    if (!membership) {
-      return NextResponse.json(
-        { error: 'Not a member of this team' },
-        { status: 403 }
+    // Rate limiting (sensitive operation)
+    const rateLimitResult = await rateLimit(req, "DELETE", user.clerkId || user.id)
+    if (!rateLimitResult.success) {
+      const response = NextResponse.json(
+        {
+          error: 'Too many requests',
+          message: 'Rate limit exceeded. Please try again later.',
+        },
+        { status: 429 }
       )
-    }
-
-    // Check if user has permission to delete routines (not READ_ONLY)
-    // Only FULL access members can create/edit/delete routines
-    if (membership.accessLevel === 'READ_ONLY') {
-      return NextResponse.json(
-        { error: 'Read-only users cannot delete routines' },
-        { status: 403 }
-      )
+      addRateLimitHeaders(response.headers, rateLimitResult.limit, rateLimitResult.remaining, rateLimitResult.reset)
+      return response
     }
 
     // Verify routine exists and belongs to team
@@ -202,14 +166,13 @@ export async function DELETE(
     addRateLimitHeaders(response.headers, rateLimitResult.limit, rateLimitResult.remaining, rateLimitResult.reset)
     return response
   } catch (error) {
-    console.error('Error deleting routine:', error)
-    return NextResponse.json(
-      {
-        error: 'Error deleting routine',
-        details: error instanceof Error ? error.message : String(error),
-      },
-      { status: 500 }
-    )
+    const resolvedParams = params instanceof Promise ? await params : params
+    const { teamId } = resolvedParams
+    return createInternalErrorResponse(error, {
+      endpoint: "/api/teams/[teamId]/routines/[routineId]",
+      method: "DELETE",
+      teamId,
+    })
   }
 }
 

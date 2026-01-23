@@ -1,57 +1,46 @@
-import { auth } from '@clerk/nextjs/server'
 import { prisma } from '@/lib/prisma'
 import { NextResponse } from 'next/server'
 import { AccessLevel } from '@prisma/client'
+import { requireTeamAccess, extractTeamId, isAuthError } from '@/lib/auth-middleware'
+import { createValidationErrorResponse, createNotFoundErrorResponse, createInternalErrorResponse } from '@/lib/error-handler'
+import { rateLimit, addRateLimitHeaders } from '@/lib/rate-limit'
 
 export async function PATCH(
   req: Request,
   { params }: { params: { teamId: string; memberId: string } | Promise<{ teamId: string; memberId: string }> }
 ) {
   try {
-    const { userId } = await auth()
-
-    if (!userId) {
-      return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      )
-    }
-
+    // Extract teamId and check authorization (admin required)
     const resolvedParams = params instanceof Promise ? await params : params
     const { teamId, memberId } = resolvedParams
+    const authResult = await requireTeamAccess(teamId, "FULL") // Need FULL access, but admin check is separate
 
-    // Get current user from database
-    const currentUser = await prisma.user.findUnique({
-      where: { clerkId: userId },
-    })
-
-    if (!currentUser) {
-      return NextResponse.json(
-        { error: 'User not found' },
-        { status: 404 }
-      )
+    if (isAuthError(authResult)) {
+      return authResult.response
     }
+
+    const { user, membership } = authResult
 
     // Verify current user is an admin of this team
-    const currentUserMembership = await prisma.careTeamMember.findFirst({
-      where: {
-        teamId: teamId,
-        userId: currentUser.id,
-      },
-    })
-
-    if (!currentUserMembership) {
-      return NextResponse.json(
-        { error: 'Not a member of this team' },
-        { status: 403 }
-      )
-    }
-
-    if (!currentUserMembership.isAdmin) {
+    if (!membership.isAdmin) {
       return NextResponse.json(
         { error: 'Only admins can update member permissions' },
         { status: 403 }
       )
+    }
+
+    // Rate limiting
+    const rateLimitResult = await rateLimit(req, "PATCH", user.clerkId || user.id)
+    if (!rateLimitResult.success) {
+      const response = NextResponse.json(
+        {
+          error: "Too many requests",
+          message: "Rate limit exceeded. Please try again later.",
+        },
+        { status: 429 }
+      )
+      addRateLimitHeaders(response.headers, rateLimitResult.limit, rateLimitResult.remaining, rateLimitResult.reset)
+      return response
     }
 
     // Parse request body
@@ -60,9 +49,14 @@ export async function PATCH(
 
     // Validate accessLevel if provided
     if (accessLevel && !['FULL', 'READ_ONLY'].includes(accessLevel)) {
-      return NextResponse.json(
-        { error: 'Invalid access level. Must be FULL or READ_ONLY' },
-        { status: 400 }
+      return createValidationErrorResponse(
+        new Error('Invalid access level. Must be FULL or READ_ONLY') as any,
+        {
+          endpoint: "/api/teams/[teamId]/members/[memberId]",
+          method: "PATCH",
+          teamId,
+          memberId,
+        }
       )
     }
 
@@ -75,10 +69,12 @@ export async function PATCH(
     })
 
     if (!memberToUpdate) {
-      return NextResponse.json(
-        { error: 'Member not found in this team' },
-        { status: 404 }
-      )
+      return createNotFoundErrorResponse("Member not found in this team", {
+        endpoint: "/api/teams/[teamId]/members/[memberId]",
+        method: "PATCH",
+        teamId,
+        memberId,
+      })
     }
 
     // Find the team creator (first admin by joinedAt date)
@@ -94,17 +90,27 @@ export async function PATCH(
 
     // Prevent removing admin from the team creator
     if (memberToUpdate.id === teamCreator?.id && isAdmin === false) {
-      return NextResponse.json(
-        { error: 'Cannot remove admin status from the team creator' },
-        { status: 400 }
+      return createValidationErrorResponse(
+        new Error('Cannot remove admin status from the team creator') as any,
+        {
+          endpoint: "/api/teams/[teamId]/members/[memberId]",
+          method: "PATCH",
+          teamId,
+          memberId,
+        }
       )
     }
 
     // Prevent admin from removing their own admin status (unless they're the creator, which is already handled above)
-    if (memberToUpdate.userId === currentUser.id && isAdmin === false) {
-      return NextResponse.json(
-        { error: 'You cannot remove your own admin status' },
-        { status: 400 }
+    if (memberToUpdate.userId === user.id && isAdmin === false) {
+      return createValidationErrorResponse(
+        new Error('You cannot remove your own admin status') as any,
+        {
+          endpoint: "/api/teams/[teamId]/members/[memberId]",
+          method: "PATCH",
+          teamId,
+          memberId,
+        }
       )
     }
 
@@ -130,7 +136,7 @@ export async function PATCH(
       },
     })
 
-    return NextResponse.json({
+    const response = NextResponse.json({
       success: true,
       member: {
         id: updatedMember.user!.id,
@@ -142,15 +148,16 @@ export async function PATCH(
         accessLevel: updatedMember.accessLevel,
       },
     })
+    addRateLimitHeaders(response.headers, rateLimitResult.limit, rateLimitResult.remaining, rateLimitResult.reset)
+    return response
   } catch (error) {
-    console.error('Error updating member permissions:', error)
-    return NextResponse.json(
-      {
-        error: 'Error updating member permissions',
-        details: error instanceof Error ? error.message : String(error),
-      },
-      { status: 500 }
-    )
+    const resolvedParams = params instanceof Promise ? await params : params
+    const { teamId } = resolvedParams
+    return createInternalErrorResponse(error, {
+      endpoint: "/api/teams/[teamId]/members/[memberId]",
+      method: "PATCH",
+      teamId,
+    })
   }
 }
 

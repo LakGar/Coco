@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from "next/server"
-import { auth } from "@clerk/nextjs/server"
 import { prisma } from "@/lib/prisma"
-import { getCurrentUser } from "@/lib/get-user"
-import { createNoteSchema, validateRequest, formatZodError } from "@/lib/validations"
+import { createNoteSchema, validateRequest } from "@/lib/validations"
 import { rateLimit, addRateLimitHeaders } from "@/lib/rate-limit"
+import { requireTeamAccess, extractTeamId, isAuthError } from "@/lib/auth-middleware"
+import { createValidationErrorResponse, createInternalErrorResponse } from "@/lib/error-handler"
+import { loggerUtils } from "@/lib/logger"
 
 // GET /api/teams/[teamId]/notes - Get all notes for a team (user can see if they're creator, editor, or viewer)
 export async function GET(
@@ -11,13 +12,18 @@ export async function GET(
   { params }: { params: { teamId: string } | Promise<{ teamId: string }> }
 ) {
   try {
-    const { userId } = await auth()
-    if (!userId) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    // Extract teamId and check authorization
+    const teamId = await extractTeamId(params)
+    const authResult = await requireTeamAccess(teamId, "READ_ONLY") // Read operations allow READ_ONLY
+
+    if (isAuthError(authResult)) {
+      return authResult.response
     }
 
+    const { user } = authResult
+
     // Rate limiting
-    const rateLimitResult = await rateLimit(request, "GET", userId)
+    const rateLimitResult = await rateLimit(request, "GET", user.clerkId || user.id)
     if (!rateLimitResult.success) {
       const response = NextResponse.json(
         {
@@ -28,25 +34,6 @@ export async function GET(
       )
       addRateLimitHeaders(response.headers, rateLimitResult.limit, rateLimitResult.remaining, rateLimitResult.reset)
       return response
-    }
-
-    const resolvedParams = params instanceof Promise ? await params : params
-    const { teamId } = resolvedParams
-    const user = await getCurrentUser()
-    if (!user) {
-      return NextResponse.json({ error: "User not found" }, { status: 404 })
-    }
-
-    // Check if user is a member of this team
-    const membership = await prisma.careTeamMember.findFirst({
-      where: {
-        teamId,
-        userId: user.id,
-      },
-    })
-
-    if (!membership) {
-      return NextResponse.json({ error: "Not a team member" }, { status: 403 })
     }
 
     // Get all notes where user is creator, editor, or viewer
@@ -132,11 +119,12 @@ export async function GET(
     addRateLimitHeaders(response.headers, rateLimitResult.limit, rateLimitResult.remaining, rateLimitResult.reset)
     return response
   } catch (error) {
-    console.error("Error fetching notes:", error)
-    return NextResponse.json(
-      { error: "Failed to fetch notes" },
-      { status: 500 }
-    )
+    const teamId = await extractTeamId(params).catch(() => "unknown")
+    return createInternalErrorResponse(error, {
+      endpoint: "/api/teams/[teamId]/notes",
+      method: "GET",
+      teamId,
+    })
   }
 }
 
@@ -146,13 +134,18 @@ export async function POST(
   { params }: { params: { teamId: string } | Promise<{ teamId: string }> }
 ) {
   try {
-    const { userId } = await auth()
-    if (!userId) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    // Extract teamId and check authorization (FULL access required for creating notes)
+    const teamId = await extractTeamId(params)
+    const authResult = await requireTeamAccess(teamId, "FULL")
+
+    if (isAuthError(authResult)) {
+      return authResult.response
     }
 
+    const { user } = authResult
+
     // Rate limiting
-    const rateLimitResult = await rateLimit(request, "POST", userId)
+    const rateLimitResult = await rateLimit(request, "POST", user.clerkId || user.id)
     if (!rateLimitResult.success) {
       const response = NextResponse.json(
         {
@@ -165,36 +158,14 @@ export async function POST(
       return response
     }
 
-    const resolvedParams = params instanceof Promise ? await params : params
-    const { teamId } = resolvedParams
-    const user = await getCurrentUser()
-    if (!user) {
-      return NextResponse.json({ error: "User not found" }, { status: 404 })
-    }
-
-    // Check if user is a member of this team with FULL access
-    const membership = await prisma.careTeamMember.findFirst({
-      where: {
-        teamId,
-        userId: user.id,
-        accessLevel: "FULL",
-      },
-    })
-
-    if (!membership) {
-      return NextResponse.json(
-        { error: "Full access required to create notes" },
-        { status: 403 }
-      )
-    }
-
     // Validate request body
     const validation = await validateRequest(request, createNoteSchema)
     if (validation.error) {
-      return NextResponse.json(
-        formatZodError(validation.error),
-        { status: 400 }
-      )
+      return createValidationErrorResponse(validation.error, {
+        endpoint: "/api/teams/[teamId]/notes",
+        method: "POST",
+        teamId,
+      })
     }
     const { title, content, editorIds = [], viewerIds = [] } = validation.data
 
@@ -277,13 +248,16 @@ export async function POST(
       },
     })
 
-    return NextResponse.json(note, { status: 201 })
+    const response = NextResponse.json(note, { status: 201 })
+    addRateLimitHeaders(response.headers, rateLimitResult.limit, rateLimitResult.remaining, rateLimitResult.reset)
+    return response
   } catch (error) {
-    console.error("Error creating note:", error)
-    return NextResponse.json(
-      { error: "Failed to create note" },
-      { status: 500 }
-    )
+    const teamId = await extractTeamId(params).catch(() => "unknown")
+    return createInternalErrorResponse(error, {
+      endpoint: "/api/teams/[teamId]/notes",
+      method: "POST",
+      teamId,
+    })
   }
 }
 

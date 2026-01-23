@@ -1,49 +1,36 @@
-import { auth } from '@clerk/nextjs/server'
 import { prisma } from '@/lib/prisma'
 import { NextResponse } from 'next/server'
+import { requireTeamAccess, extractTeamId, isAuthError } from '@/lib/auth-middleware'
+import { createInternalErrorResponse } from '@/lib/error-handler'
+import { rateLimit, addRateLimitHeaders } from '@/lib/rate-limit'
 
 export async function GET(
   req: Request,
   { params }: { params: { teamId: string } | Promise<{ teamId: string }> }
 ) {
   try {
-    const { userId } = await auth()
+    // Extract teamId and check authorization
+    const teamId = await extractTeamId(params)
+    const authResult = await requireTeamAccess(teamId, "READ_ONLY") // Read operations allow READ_ONLY
 
-    if (!userId) {
-      return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      )
+    if (isAuthError(authResult)) {
+      return authResult.response
     }
 
-    const resolvedParams = params instanceof Promise ? await params : params
-    const { teamId } = resolvedParams
+    const { user } = authResult
 
-    // Get user from database
-    const user = await prisma.user.findUnique({
-      where: { clerkId: userId },
-    })
-
-    if (!user) {
-      return NextResponse.json(
-        { error: 'User not found' },
-        { status: 404 }
+    // Rate limiting
+    const rateLimitResult = await rateLimit(req, "GET", user.clerkId || user.id)
+    if (!rateLimitResult.success) {
+      const response = NextResponse.json(
+        {
+          error: "Too many requests",
+          message: "Rate limit exceeded. Please try again later.",
+        },
+        { status: 429 }
       )
-    }
-
-    // Verify user is a member of this team
-    const membership = await prisma.careTeamMember.findFirst({
-      where: {
-        teamId: teamId,
-        userId: user.id,
-      },
-    })
-
-    if (!membership) {
-      return NextResponse.json(
-        { error: 'Not a member of this team' },
-        { status: 403 }
-      )
+      addRateLimitHeaders(response.headers, rateLimitResult.limit, rateLimitResult.remaining, rateLimitResult.reset)
+      return response
     }
 
     // Get all team members
@@ -130,7 +117,7 @@ export async function GET(
       },
     })
 
-    return NextResponse.json({
+    const response = NextResponse.json({
       team: {
         id: team.id,
         name: team.name,
@@ -143,19 +130,19 @@ export async function GET(
       patient,
       currentUser: {
         id: user.id,
-        isAdmin: membership.isAdmin,
-        accessLevel: membership.accessLevel,
+        isAdmin: authResult.membership.isAdmin,
+        accessLevel: authResult.membership.accessLevel,
       },
     })
+    addRateLimitHeaders(response.headers, rateLimitResult.limit, rateLimitResult.remaining, rateLimitResult.reset)
+    return response
   } catch (error) {
-    console.error('Error fetching team members:', error)
-    return NextResponse.json(
-      {
-        error: 'Error fetching team members',
-        details: error instanceof Error ? error.message : String(error),
-      },
-      { status: 500 }
-    )
+    const teamId = await extractTeamId(params).catch(() => "unknown")
+    return createInternalErrorResponse(error, {
+      endpoint: "/api/teams/[teamId]/members",
+      method: "GET",
+      teamId,
+    })
   }
 }
 

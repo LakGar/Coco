@@ -1,59 +1,39 @@
-import { auth } from '@clerk/nextjs/server'
 import { prisma } from '@/lib/prisma'
 import { NextResponse } from 'next/server'
-import { createRoutineInstanceSchema, validateRequest, formatZodError } from '@/lib/validations'
-
-// Log schema import for debugging
-console.log('[route.ts] Schema imported:', {
-  schemaType: typeof createRoutineInstanceSchema,
-  schemaValue: createRoutineInstanceSchema,
-  hasParse: typeof createRoutineInstanceSchema?.parse === 'function',
-  isUndefined: createRoutineInstanceSchema === undefined,
-  isNull: createRoutineInstanceSchema === null,
-})
+import { createRoutineInstanceSchema, validateRequest } from '@/lib/validations'
+import { requireTeamAccess, extractTeamId, isAuthError } from '@/lib/auth-middleware'
+import { createValidationErrorResponse, createInternalErrorResponse } from '@/lib/error-handler'
+import { rateLimit, addRateLimitHeaders } from '@/lib/rate-limit'
+import { log } from '@/lib/logger'
 
 export async function GET(
   req: Request,
   { params }: { params: { teamId: string; routineId: string } | Promise<{ teamId: string; routineId: string }> }
 ) {
   try {
-    const { userId } = await auth()
-
-    if (!userId) {
-      return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      )
-    }
-
+    // Extract teamId and check authorization
     const resolvedParams = params instanceof Promise ? await params : params
     const { teamId, routineId } = resolvedParams
+    const authResult = await requireTeamAccess(teamId, "READ_ONLY") // Read operations allow READ_ONLY
 
-    // Get user from database
-    const user = await prisma.user.findUnique({
-      where: { clerkId: userId },
-    })
-
-    if (!user) {
-      return NextResponse.json(
-        { error: 'User not found' },
-        { status: 404 }
-      )
+    if (isAuthError(authResult)) {
+      return authResult.response
     }
 
-    // Verify user is a member of this team
-    const membership = await prisma.careTeamMember.findFirst({
-      where: {
-        teamId: teamId,
-        userId: user.id,
-      },
-    })
+    const { user } = authResult
 
-    if (!membership) {
-      return NextResponse.json(
-        { error: 'Not a member of this team' },
-        { status: 403 }
+    // Rate limiting
+    const rateLimitResult = await rateLimit(req, "GET", user.clerkId || user.id)
+    if (!rateLimitResult.success) {
+      const response = NextResponse.json(
+        {
+          error: "Too many requests",
+          message: "Rate limit exceeded. Please try again later.",
+        },
+        { status: 429 }
       )
+      addRateLimitHeaders(response.headers, rateLimitResult.limit, rateLimitResult.remaining, rateLimitResult.reset)
+      return response
     }
 
     // Get routine instances
@@ -82,16 +62,17 @@ export async function GET(
       take: limit,
     })
 
-    return NextResponse.json({ instances })
+    const response = NextResponse.json({ instances })
+    addRateLimitHeaders(response.headers, rateLimitResult.limit, rateLimitResult.remaining, rateLimitResult.reset)
+    return response
   } catch (error) {
-    console.error('Error fetching routine instances:', error)
-    return NextResponse.json(
-      {
-        error: 'Error fetching routine instances',
-        details: error instanceof Error ? error.message : String(error),
-      },
-      { status: 500 }
-    )
+    const resolvedParams = params instanceof Promise ? await params : params
+    const { teamId } = resolvedParams
+    return createInternalErrorResponse(error, {
+      endpoint: "/api/teams/[teamId]/routines/[routineId]/instances",
+      method: "GET",
+      teamId,
+    })
   }
 }
 
@@ -100,75 +81,45 @@ export async function POST(
   { params }: { params: { teamId: string; routineId: string } | Promise<{ teamId: string; routineId: string }> }
 ) {
   try {
-    const { userId } = await auth()
-
-    if (!userId) {
-      return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      )
-    }
-
+    // Extract teamId and check authorization (FULL access required for creating instances)
     const resolvedParams = params instanceof Promise ? await params : params
     const { teamId, routineId } = resolvedParams
+    const authResult = await requireTeamAccess(teamId, "FULL")
 
-    // Get user from database
-    const user = await prisma.user.findUnique({
-      where: { clerkId: userId },
-    })
-
-    if (!user) {
-      return NextResponse.json(
-        { error: 'User not found' },
-        { status: 404 }
-      )
+    if (isAuthError(authResult)) {
+      return authResult.response
     }
 
-    // Verify user is a member of this team
-    const membership = await prisma.careTeamMember.findFirst({
-      where: {
-        teamId: teamId,
-        userId: user.id,
-      },
-    })
+    const { user } = authResult
 
-    if (!membership) {
-      return NextResponse.json(
-        { error: 'Not a member of this team' },
-        { status: 403 }
+    // Rate limiting
+    const rateLimitResult = await rateLimit(req, "POST", user.clerkId || user.id)
+    if (!rateLimitResult.success) {
+      const response = NextResponse.json(
+        {
+          error: "Too many requests",
+          message: "Rate limit exceeded. Please try again later.",
+        },
+        { status: 429 }
       )
-    }
-
-    // Check if user has permission (not READ_ONLY)
-    if (membership.accessLevel === 'READ_ONLY') {
-      return NextResponse.json(
-        { error: 'Read-only users cannot create routine instances' },
-        { status: 403 }
-      )
+      addRateLimitHeaders(response.headers, rateLimitResult.limit, rateLimitResult.remaining, rateLimitResult.reset)
+      return response
     }
 
     // Validate request body
-    console.log('[POST /instances] Starting validation')
-    console.log('[POST /instances] createRoutineInstanceSchema:', createRoutineInstanceSchema)
-    console.log('[POST /instances] Schema type:', typeof createRoutineInstanceSchema)
-    console.log('[POST /instances] Schema keys:', Object.keys(createRoutineInstanceSchema || {}))
-    console.log('[POST /instances] Request URL:', req.url)
-    console.log('[POST /instances] Request method:', req.method)
-    
+    log.debug({ routineId, teamId }, 'Starting routine instance validation')
     const validation = await validateRequest(req, createRoutineInstanceSchema)
     
     if (validation.error) {
-      console.error('[POST /instances] Validation failed')
-      console.error('[POST /instances] Validation error:', validation.error)
-      console.error('[POST /instances] Validation error details:', JSON.stringify(validation.error, null, 2))
-      console.error('[POST /instances] Validation error issues:', validation.error.issues)
-      return NextResponse.json(
-        formatZodError(validation.error),
-        { status: 400 }
-      )
+      return createValidationErrorResponse(validation.error, {
+        endpoint: "/api/teams/[teamId]/routines/[routineId]/instances",
+        method: "POST",
+        teamId,
+        routineId,
+      })
     }
     
-    console.log('[POST /instances] Validation successful')
+    log.debug({ routineId, teamId }, 'Routine instance validation successful')
     const { entryDate, answers, completedItems, skippedItems, notes } = validation.data
 
     // Create or update instance
@@ -212,16 +163,17 @@ export async function POST(
       },
     })
 
-    return NextResponse.json({ instance }, { status: 201 })
+    const response = NextResponse.json({ instance }, { status: 201 })
+    addRateLimitHeaders(response.headers, rateLimitResult.limit, rateLimitResult.remaining, rateLimitResult.reset)
+    return response
   } catch (error) {
-    console.error('Error creating routine instance:', error)
-    return NextResponse.json(
-      {
-        error: 'Error creating routine instance',
-        details: error instanceof Error ? error.message : String(error),
-      },
-      { status: 500 }
-    )
+    const resolvedParams = params instanceof Promise ? await params : params
+    const { teamId } = resolvedParams
+    return createInternalErrorResponse(error, {
+      endpoint: "/api/teams/[teamId]/routines/[routineId]/instances",
+      method: "POST",
+      teamId,
+    })
   }
 }
 

@@ -1,26 +1,28 @@
-import { auth } from '@clerk/nextjs/server'
 import { prisma } from '@/lib/prisma'
 import { NextResponse } from 'next/server'
 import { createRoutineSchema, validateRequest, formatZodError } from '@/lib/validations'
 import { TaskPriority, RecurrenceType } from '@prisma/client'
 import { rateLimit, addRateLimitHeaders } from '@/lib/rate-limit'
+import { requireTeamAccess, extractTeamId, isAuthError } from '@/lib/auth-middleware'
+import { createValidationErrorResponse, createInternalErrorResponse } from '@/lib/error-handler'
 
 export async function GET(
   req: Request,
   { params }: { params: { teamId: string } | Promise<{ teamId: string }> }
 ) {
   try {
-    const { userId } = await auth()
+    // Extract teamId and check authorization
+    const teamId = await extractTeamId(params)
+    const authResult = await requireTeamAccess(teamId, 'READ_ONLY') // Read operations allow READ_ONLY
 
-    if (!userId) {
-      return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      )
+    if (isAuthError(authResult)) {
+      return authResult.response
     }
 
+    const { user } = authResult
+
     // Rate limiting
-    const rateLimitResult = await rateLimit(req, "GET", userId)
+    const rateLimitResult = await rateLimit(req, "GET", user.clerkId || user.id)
     if (!rateLimitResult.success) {
       const response = NextResponse.json(
         {
@@ -31,36 +33,6 @@ export async function GET(
       )
       addRateLimitHeaders(response.headers, rateLimitResult.limit, rateLimitResult.remaining, rateLimitResult.reset)
       return response
-    }
-
-    const resolvedParams = params instanceof Promise ? await params : params
-    const { teamId } = resolvedParams
-
-    // Get user from database
-    const user = await prisma.user.findUnique({
-      where: { clerkId: userId },
-    })
-
-    if (!user) {
-      return NextResponse.json(
-        { error: 'User not found' },
-        { status: 404 }
-      )
-    }
-
-    // Verify user is a member of this team
-    const membership = await prisma.careTeamMember.findFirst({
-      where: {
-        teamId: teamId,
-        userId: user.id,
-      },
-    })
-
-    if (!membership) {
-      return NextResponse.json(
-        { error: 'Not a member of this team' },
-        { status: 403 }
-      )
     }
 
     // All team members (READ_ONLY and FULL) can view routines
@@ -103,27 +75,12 @@ export async function GET(
     addRateLimitHeaders(response.headers, rateLimitResult.limit, rateLimitResult.remaining, rateLimitResult.reset)
     return response
   } catch (error) {
-    console.error('Error fetching routines:', error)
-    console.error('Error details:', error instanceof Error ? error.stack : String(error))
-    
-    // Check if it's a Prisma client issue
-    if (error instanceof Error && error.message.includes('Cannot read properties of undefined')) {
-      return NextResponse.json(
-        {
-          error: 'Prisma client not updated. Please restart the dev server after running "npx prisma generate"',
-          details: error.message,
-        },
-        { status: 500 }
-      )
-    }
-    
-    return NextResponse.json(
-      {
-        error: 'Error fetching routines',
-        details: error instanceof Error ? error.message : String(error),
-      },
-      { status: 500 }
-    )
+    const teamId = await extractTeamId(params)
+    return createInternalErrorResponse(error, {
+      endpoint: '/api/teams/[teamId]/routines',
+      method: 'GET',
+      teamId,
+    })
   }
 }
 
@@ -132,17 +89,18 @@ export async function POST(
   { params }: { params: { teamId: string } | Promise<{ teamId: string }> }
 ) {
   try {
-    const { userId } = await auth()
+    // Extract teamId and check authorization (requires FULL access for write operations)
+    const teamId = await extractTeamId(params)
+    const authResult = await requireTeamAccess(teamId, 'FULL')
 
-    if (!userId) {
-      return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      )
+    if (isAuthError(authResult)) {
+      return authResult.response
     }
 
+    const { user } = authResult
+
     // Rate limiting
-    const rateLimitResult = await rateLimit(req, "POST", userId)
+    const rateLimitResult = await rateLimit(req, "POST", user.clerkId || user.id)
     if (!rateLimitResult.success) {
       const response = NextResponse.json(
         {
@@ -155,52 +113,15 @@ export async function POST(
       return response
     }
 
-    const resolvedParams = params instanceof Promise ? await params : params
-    const { teamId } = resolvedParams
-
-    // Get user from database
-    const user = await prisma.user.findUnique({
-      where: { clerkId: userId },
-    })
-
-    if (!user) {
-      return NextResponse.json(
-        { error: 'User not found' },
-        { status: 404 }
-      )
-    }
-
-    // Verify user is a member of this team
-    const membership = await prisma.careTeamMember.findFirst({
-      where: {
-        teamId: teamId,
-        userId: user.id,
-      },
-    })
-
-    if (!membership) {
-      return NextResponse.json(
-        { error: 'Not a member of this team' },
-        { status: 403 }
-      )
-    }
-
-    // Check if user has permission to create routines (not READ_ONLY)
-    // Only FULL access members can create/edit/delete routines
-    if (membership.accessLevel === 'READ_ONLY') {
-      return NextResponse.json(
-        { error: 'Read-only users cannot create routines' },
-        { status: 403 }
-      )
-    }
-
     // Validate request body
     const validation = await validateRequest(req, createRoutineSchema)
     if (validation.error) {
-      return NextResponse.json(
-        formatZodError(validation.error),
-        { status: 400 }
-      )
+      return createValidationErrorResponse(validation.error, {
+        endpoint: '/api/teams/[teamId]/routines',
+        method: 'POST',
+        teamId,
+        userId: user.id,
+      })
     }
     const {
       name,
@@ -286,14 +207,12 @@ export async function POST(
     addRateLimitHeaders(response.headers, rateLimitResult.limit, rateLimitResult.remaining, rateLimitResult.reset)
     return response
   } catch (error) {
-    console.error('Error creating routine:', error)
-    return NextResponse.json(
-      {
-        error: 'Error creating routine',
-        details: error instanceof Error ? error.message : String(error),
-      },
-      { status: 500 }
-    )
+    const teamId = await extractTeamId(params)
+    return createInternalErrorResponse(error, {
+      endpoint: '/api/teams/[teamId]/routines',
+      method: 'POST',
+      teamId,
+    })
   }
 }
 

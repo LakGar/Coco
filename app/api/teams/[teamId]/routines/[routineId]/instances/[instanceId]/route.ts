@@ -1,59 +1,38 @@
-import { auth } from '@clerk/nextjs/server'
 import { prisma } from '@/lib/prisma'
 import { NextResponse } from 'next/server'
-import { updateRoutineInstanceSchema, validateRequest, formatZodError } from '@/lib/validations'
+import { updateRoutineInstanceSchema, validateRequest } from '@/lib/validations'
+import { requireTeamAccess, extractTeamId, isAuthError } from '@/lib/auth-middleware'
+import { createValidationErrorResponse, createNotFoundErrorResponse, createInternalErrorResponse } from '@/lib/error-handler'
+import { rateLimit, addRateLimitHeaders } from '@/lib/rate-limit'
 
 export async function PATCH(
   req: Request,
   { params }: { params: { teamId: string; routineId: string; instanceId: string } | Promise<{ teamId: string; routineId: string; instanceId: string }> }
 ) {
   try {
-    const { userId } = await auth()
-
-    if (!userId) {
-      return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      )
-    }
-
+    // Extract teamId and check authorization (FULL access required)
     const resolvedParams = params instanceof Promise ? await params : params
     const { teamId, routineId, instanceId } = resolvedParams
+    const authResult = await requireTeamAccess(teamId, "FULL")
 
-    // Get user from database
-    const user = await prisma.user.findUnique({
-      where: { clerkId: userId },
-    })
-
-    if (!user) {
-      return NextResponse.json(
-        { error: 'User not found' },
-        { status: 404 }
-      )
+    if (isAuthError(authResult)) {
+      return authResult.response
     }
 
-    // Verify user is a member of this team
-    const membership = await prisma.careTeamMember.findFirst({
-      where: {
-        teamId: teamId,
-        userId: user.id,
-      },
-    })
+    const { user } = authResult
 
-    if (!membership) {
-      return NextResponse.json(
-        { error: 'Not a member of this team' },
-        { status: 403 }
+    // Rate limiting
+    const rateLimitResult = await rateLimit(req, "PATCH", user.clerkId || user.id)
+    if (!rateLimitResult.success) {
+      const response = NextResponse.json(
+        {
+          error: "Too many requests",
+          message: "Rate limit exceeded. Please try again later.",
+        },
+        { status: 429 }
       )
-    }
-
-    // Check if user has permission to update routine instances (not READ_ONLY)
-    // Only FULL access members can complete/skip instances and add journal entries
-    if (membership.accessLevel === 'READ_ONLY') {
-      return NextResponse.json(
-        { error: 'Read-only users cannot update routine instances' },
-        { status: 403 }
-      )
+      addRateLimitHeaders(response.headers, rateLimitResult.limit, rateLimitResult.remaining, rateLimitResult.reset)
+      return response
     }
 
     // Verify instance exists and belongs to routine/team
@@ -68,19 +47,25 @@ export async function PATCH(
     })
 
     if (!instance) {
-      return NextResponse.json(
-        { error: 'Routine instance not found' },
-        { status: 404 }
-      )
+      return createNotFoundErrorResponse("Routine instance not found", {
+        endpoint: "/api/teams/[teamId]/routines/[routineId]/instances/[instanceId]",
+        method: "PATCH",
+        teamId,
+        routineId,
+        instanceId,
+      })
     }
 
     // Validate request body
     const validation = await validateRequest(req, updateRoutineInstanceSchema)
     if (validation.error) {
-      return NextResponse.json(
-        formatZodError(validation.error),
-        { status: 400 }
-      )
+      return createValidationErrorResponse(validation.error, {
+        endpoint: "/api/teams/[teamId]/routines/[routineId]/instances/[instanceId]",
+        method: "PATCH",
+        teamId,
+        routineId,
+        instanceId,
+      })
     }
     const { answers, completedItems, skippedItems, notes } = validation.data
 
@@ -120,16 +105,17 @@ export async function PATCH(
       },
     })
 
-    return NextResponse.json({ instance: updatedInstance })
+    const response = NextResponse.json({ instance: updatedInstance })
+    addRateLimitHeaders(response.headers, rateLimitResult.limit, rateLimitResult.remaining, rateLimitResult.reset)
+    return response
   } catch (error) {
-    console.error('Error updating routine instance:', error)
-    return NextResponse.json(
-      {
-        error: 'Error updating routine instance',
-        details: error instanceof Error ? error.message : String(error),
-      },
-      { status: 500 }
-    )
+    const resolvedParams = params instanceof Promise ? await params : params
+    const { teamId } = resolvedParams
+    return createInternalErrorResponse(error, {
+      endpoint: "/api/teams/[teamId]/routines/[routineId]/instances/[instanceId]",
+      method: "PATCH",
+      teamId,
+    })
   }
 }
 

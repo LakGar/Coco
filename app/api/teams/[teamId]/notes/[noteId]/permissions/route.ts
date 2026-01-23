@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
-import { auth } from "@clerk/nextjs/server"
 import { prisma } from "@/lib/prisma"
-import { getCurrentUser } from "@/lib/get-user"
+import { requireTeamAccess, extractTeamId, isAuthError } from "@/lib/auth-middleware"
+import { createNotFoundErrorResponse, createInternalErrorResponse } from "@/lib/error-handler"
 
 // PATCH /api/teams/[teamId]/notes/[noteId]/permissions - Update note permissions (only creator)
 export async function PATCH(
@@ -9,17 +9,16 @@ export async function PATCH(
   { params }: { params: { teamId: string; noteId: string } | Promise<{ teamId: string; noteId: string }> }
 ) {
   try {
-    const { userId } = await auth()
-    if (!userId) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-    }
-
+    // Extract teamId and check authorization
     const resolvedParams = params instanceof Promise ? await params : params
     const { teamId, noteId } = resolvedParams
-    const user = await getCurrentUser()
-    if (!user) {
-      return NextResponse.json({ error: "User not found" }, { status: 404 })
+    const authResult = await requireTeamAccess(teamId, "READ_ONLY") // Need team membership, but note permissions checked separately
+
+    if (isAuthError(authResult)) {
+      return authResult.response
     }
+
+    const { user } = authResult
 
     // Check if user is the creator of this note
     const note = await prisma.note.findFirst({
@@ -31,10 +30,12 @@ export async function PATCH(
     })
 
     if (!note) {
-      return NextResponse.json(
-        { error: "Only the note creator can manage permissions" },
-        { status: 403 }
-      )
+      return createNotFoundErrorResponse("Only the note creator can manage permissions", {
+        endpoint: "/api/teams/[teamId]/notes/[noteId]/permissions",
+        method: "PATCH",
+        teamId,
+        noteId,
+      })
     }
 
     const body = await request.json()
@@ -173,13 +174,33 @@ export async function PATCH(
       },
     })
 
-    return NextResponse.json(updatedNote)
+    if (!updatedNote) {
+      return createNotFoundErrorResponse("Note not found", {
+        endpoint: "/api/teams/[teamId]/notes/[noteId]/permissions",
+        method: "PATCH",
+        teamId,
+        noteId,
+      })
+    }
+
+    // Calculate permissions (same logic as GET endpoint)
+    const isCreator = updatedNote.createdById === user.id
+    const isEditor = updatedNote.editors.some((e) => e.userId === user.id)
+
+    return NextResponse.json({
+      ...updatedNote,
+      canEdit: isCreator || isEditor,
+      canDelete: isCreator,
+      userRole: isCreator ? "creator" : isEditor ? "editor" : "viewer",
+    })
   } catch (error) {
-    console.error("Error updating note permissions:", error)
-    return NextResponse.json(
-      { error: "Failed to update note permissions" },
-      { status: 500 }
-    )
+    const resolvedParams = params instanceof Promise ? await params : params
+    const { teamId } = resolvedParams
+    return createInternalErrorResponse(error, {
+      endpoint: "/api/teams/[teamId]/notes/[noteId]/permissions",
+      method: "PATCH",
+      teamId,
+    })
   }
 }
 

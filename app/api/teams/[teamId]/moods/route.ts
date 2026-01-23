@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from "next/server"
-import { auth } from "@clerk/nextjs/server"
 import { prisma } from "@/lib/prisma"
-import { getCurrentUser } from "@/lib/get-user"
 import { rateLimit, addRateLimitHeaders } from "@/lib/rate-limit"
-import { createMoodSchema, validateRequest, formatZodError } from "@/lib/validations"
+import { createMoodSchema, validateRequest } from "@/lib/validations"
+import { requireTeamAccess, extractTeamId, isAuthError } from "@/lib/auth-middleware"
+import { createValidationErrorResponse, createInternalErrorResponse } from "@/lib/error-handler"
 
 // GET /api/teams/[teamId]/moods - Get moods for a team
 export async function GET(
@@ -11,13 +11,18 @@ export async function GET(
   { params }: { params: { teamId: string } | Promise<{ teamId: string }> }
 ) {
   try {
-    const { userId } = await auth()
-    if (!userId) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    // Extract teamId and check authorization
+    const teamId = await extractTeamId(params)
+    const authResult = await requireTeamAccess(teamId, "READ_ONLY") // Read operations allow READ_ONLY
+
+    if (isAuthError(authResult)) {
+      return authResult.response
     }
 
+    const { user } = authResult
+
     // Rate limiting
-    const rateLimitResult = await rateLimit(request, "GET", userId)
+    const rateLimitResult = await rateLimit(request, "GET", user.clerkId || user.id)
     if (!rateLimitResult.success) {
       const response = NextResponse.json(
         {
@@ -28,25 +33,6 @@ export async function GET(
       )
       addRateLimitHeaders(response.headers, rateLimitResult.limit, rateLimitResult.remaining, rateLimitResult.reset)
       return response
-    }
-
-    const resolvedParams = params instanceof Promise ? await params : params
-    const { teamId } = resolvedParams
-    const user = await getCurrentUser()
-    if (!user) {
-      return NextResponse.json({ error: "User not found" }, { status: 404 })
-    }
-
-    // Check if user is a member of this team
-    const membership = await prisma.careTeamMember.findFirst({
-      where: {
-        teamId,
-        userId: user.id,
-      },
-    })
-
-    if (!membership) {
-      return NextResponse.json({ error: "Not a team member" }, { status: 403 })
     }
 
     // Get moods for this team, ordered by most recent first
@@ -76,11 +62,12 @@ export async function GET(
     addRateLimitHeaders(response.headers, rateLimitResult.limit, rateLimitResult.remaining, rateLimitResult.reset)
     return response
   } catch (error) {
-    console.error("Error fetching moods:", error)
-    return NextResponse.json(
-      { error: "Failed to fetch moods" },
-      { status: 500 }
-    )
+    const teamId = await extractTeamId(params).catch(() => "unknown")
+    return createInternalErrorResponse(error, {
+      endpoint: "/api/teams/[teamId]/moods",
+      method: "GET",
+      teamId,
+    })
   }
 }
 
@@ -90,13 +77,18 @@ export async function POST(
   { params }: { params: { teamId: string } | Promise<{ teamId: string }> }
 ) {
   try {
-    const { userId } = await auth()
-    if (!userId) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    // Extract teamId and check authorization
+    const teamId = await extractTeamId(params)
+    const authResult = await requireTeamAccess(teamId, "FULL") // Creating moods requires FULL access
+
+    if (isAuthError(authResult)) {
+      return authResult.response
     }
 
+    const { user } = authResult
+
     // Rate limiting
-    const rateLimitResult = await rateLimit(request, "POST", userId)
+    const rateLimitResult = await rateLimit(request, "POST", user.clerkId || user.id)
     if (!rateLimitResult.success) {
       const response = NextResponse.json(
         {
@@ -109,32 +101,14 @@ export async function POST(
       return response
     }
 
-    const resolvedParams = params instanceof Promise ? await params : params
-    const { teamId } = resolvedParams
-    const user = await getCurrentUser()
-    if (!user) {
-      return NextResponse.json({ error: "User not found" }, { status: 404 })
-    }
-
-    // Check if user is a member of this team
-    const membership = await prisma.careTeamMember.findFirst({
-      where: {
-        teamId,
-        userId: user.id,
-      },
-    })
-
-    if (!membership) {
-      return NextResponse.json({ error: "Not a team member" }, { status: 403 })
-    }
-
     // Validate request body
     const validation = await validateRequest(request, createMoodSchema)
     if (validation.error) {
-      return NextResponse.json(
-        formatZodError(validation.error),
-        { status: 400 }
-      )
+      return createValidationErrorResponse(validation.error, {
+        endpoint: "/api/teams/[teamId]/moods",
+        method: "POST",
+        teamId,
+      })
     }
     const { rating, notes, observedAt } = validation.data
 
@@ -164,20 +138,13 @@ export async function POST(
     const response = NextResponse.json(mood, { status: 201 })
     addRateLimitHeaders(response.headers, rateLimitResult.limit, rateLimitResult.remaining, rateLimitResult.reset)
     return response
-  } catch (error: any) {
-    console.error("Error creating mood:", error)
-    console.error("Error details:", {
-      message: error?.message,
-      code: error?.code,
-      meta: error?.meta,
+  } catch (error) {
+    const teamId = await extractTeamId(params).catch(() => "unknown")
+    return createInternalErrorResponse(error, {
+      endpoint: "/api/teams/[teamId]/moods",
+      method: "POST",
+      teamId,
     })
-    return NextResponse.json(
-      { 
-        error: "Failed to create mood",
-        details: error?.message || "Unknown error",
-      },
-      { status: 500 }
-    )
   }
 }
 

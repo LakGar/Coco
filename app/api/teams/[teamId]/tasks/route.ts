@@ -1,66 +1,59 @@
-import { auth } from '@clerk/nextjs/server'
-import { prisma } from '@/lib/prisma'
-import { NextResponse } from 'next/server'
-import { TaskPriority, TaskStatus } from '@prisma/client'
-import { createTaskSchema, validateRequest, formatZodError } from '@/lib/validations'
-import { rateLimit, addRateLimitHeaders } from '@/lib/rate-limit'
+import { prisma } from "@/lib/prisma";
+import { NextResponse } from "next/server";
+import { TaskPriority, TaskStatus } from "@prisma/client";
+import {
+  createTaskSchema,
+  validateRequest,
+  formatZodError,
+} from "@/lib/validations";
+import { rateLimit, addRateLimitHeaders } from "@/lib/rate-limit";
+import {
+  requireTeamAccess,
+  extractTeamId,
+  isAuthError,
+} from "@/lib/auth-middleware";
+import {
+  createErrorResponse,
+  createValidationErrorResponse,
+  createInternalErrorResponse,
+} from "@/lib/error-handler";
 
 export async function GET(
   req: Request,
-  { params }: { params: { teamId: string } | Promise<{ teamId: string }> }
+  { params }: { params: { teamId: string } | Promise<{ teamId: string }> },
 ) {
   try {
-    const { userId } = await auth()
+    // Extract teamId and check authorization
+    const teamId = await extractTeamId(params);
+    const authResult = await requireTeamAccess(teamId, "READ_ONLY"); // Read operations allow READ_ONLY
 
-    if (!userId) {
-      return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      )
+    if (isAuthError(authResult)) {
+      return authResult.response;
     }
+
+    const { user } = authResult;
 
     // Rate limiting
-    const rateLimitResult = await rateLimit(req, "GET", userId)
+    const rateLimitResult = await rateLimit(
+      req,
+      "GET",
+      user.clerkId || user.id,
+    );
     if (!rateLimitResult.success) {
       const response = NextResponse.json(
-        { 
-          error: 'Too many requests',
-          message: 'Rate limit exceeded. Please try again later.',
+        {
+          error: "Too many requests",
+          message: "Rate limit exceeded. Please try again later.",
         },
-        { status: 429 }
-      )
-      addRateLimitHeaders(response.headers, rateLimitResult.limit, rateLimitResult.remaining, rateLimitResult.reset)
-      return response
-    }
-
-    const resolvedParams = params instanceof Promise ? await params : params
-    const { teamId } = resolvedParams
-
-    // Get user from database
-    const user = await prisma.user.findUnique({
-      where: { clerkId: userId },
-    })
-
-    if (!user) {
-      return NextResponse.json(
-        { error: 'User not found' },
-        { status: 404 }
-      )
-    }
-
-    // Verify user is a member of this team
-    const membership = await prisma.careTeamMember.findFirst({
-      where: {
-        teamId: teamId,
-        userId: user.id,
-      },
-    })
-
-    if (!membership) {
-      return NextResponse.json(
-        { error: 'Not a member of this team' },
-        { status: 403 }
-      )
+        { status: 429 },
+      );
+      addRateLimitHeaders(
+        response.headers,
+        rateLimitResult.limit,
+        rateLimitResult.remaining,
+        rateLimitResult.reset,
+      );
+      return response;
     }
 
     // Get all tasks for this team
@@ -90,100 +83,74 @@ export async function GET(
           },
         },
       },
-      orderBy: [
-        { dueDate: 'asc' },
-        { createdAt: 'desc' },
-      ],
-    })
+      orderBy: [{ dueDate: "asc" }, { createdAt: "desc" }],
+    });
 
-    const response = NextResponse.json({ tasks })
-    addRateLimitHeaders(response.headers, rateLimitResult.limit, rateLimitResult.remaining, rateLimitResult.reset)
-    return response
+    const response = NextResponse.json({ tasks });
+    addRateLimitHeaders(
+      response.headers,
+      rateLimitResult.limit,
+      rateLimitResult.remaining,
+      rateLimitResult.reset,
+    );
+    return response;
   } catch (error) {
-    console.error('Error fetching tasks:', error)
-    return NextResponse.json(
-      {
-        error: 'Error fetching tasks',
-        details: error instanceof Error ? error.message : String(error),
-      },
-      { status: 500 }
-    )
+    const teamId = await extractTeamId(params);
+    return createInternalErrorResponse(error, {
+      endpoint: "/api/teams/[teamId]/tasks",
+      method: "GET",
+      teamId,
+    });
   }
 }
 
 export async function POST(
   req: Request,
-  { params }: { params: { teamId: string } | Promise<{ teamId: string }> }
+  { params }: { params: { teamId: string } | Promise<{ teamId: string }> },
 ) {
   try {
-    const { userId } = await auth()
+    // Extract teamId and check authorization (requires FULL access for write operations)
+    const teamId = await extractTeamId(params);
+    const authResult = await requireTeamAccess(teamId, "FULL");
 
-    if (!userId) {
-      return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      )
+    if (isAuthError(authResult)) {
+      return authResult.response;
     }
 
+    const { user } = authResult;
+
     // Rate limiting
-    const rateLimitResult = await rateLimit(req, "POST", userId)
+    const rateLimitResult = await rateLimit(
+      req,
+      "POST",
+      user.clerkId || user.id,
+    );
     if (!rateLimitResult.success) {
       const response = NextResponse.json(
         {
-          error: 'Too many requests',
-          message: 'Rate limit exceeded. Please try again later.',
+          error: "Too many requests",
+          message: "Rate limit exceeded. Please try again later.",
         },
-        { status: 429 }
-      )
-      addRateLimitHeaders(response.headers, rateLimitResult.limit, rateLimitResult.remaining, rateLimitResult.reset)
-      return response
-    }
-
-    const resolvedParams = params instanceof Promise ? await params : params
-    const { teamId } = resolvedParams
-
-    // Get user from database
-    const user = await prisma.user.findUnique({
-      where: { clerkId: userId },
-    })
-
-    if (!user) {
-      return NextResponse.json(
-        { error: 'User not found' },
-        { status: 404 }
-      )
-    }
-
-    // Verify user is a member of this team
-    const membership = await prisma.careTeamMember.findFirst({
-      where: {
-        teamId: teamId,
-        userId: user.id,
-      },
-    })
-
-    if (!membership) {
-      return NextResponse.json(
-        { error: 'Not a member of this team' },
-        { status: 403 }
-      )
-    }
-
-    // Check if user has permission to create tasks (not READ_ONLY)
-    if (membership.accessLevel === 'READ_ONLY') {
-      return NextResponse.json(
-        { error: 'Read-only users cannot create tasks' },
-        { status: 403 }
-      )
+        { status: 429 },
+      );
+      addRateLimitHeaders(
+        response.headers,
+        rateLimitResult.limit,
+        rateLimitResult.remaining,
+        rateLimitResult.reset,
+      );
+      return response;
     }
 
     // Validate request body
-    const validation = await validateRequest(req, createTaskSchema)
+    const validation = await validateRequest(req, createTaskSchema);
     if (validation.error) {
-      return NextResponse.json(
-        formatZodError(validation.error),
-        { status: 400 }
-      )
+      return createValidationErrorResponse(validation.error, {
+        endpoint: "/api/teams/[teamId]/tasks",
+        method: "POST",
+        teamId,
+        userId: user.id,
+      });
     }
     const {
       name,
@@ -193,7 +160,7 @@ export async function POST(
       priority,
       status,
       dueDate,
-    } = validation.data
+    } = validation.data;
 
     // Get team to get patient name if not provided
     const team = await prisma.careTeam.findUnique({
@@ -207,20 +174,19 @@ export async function POST(
           },
         },
       },
-    })
+    });
 
     if (!team) {
-      return NextResponse.json(
-        { error: 'Team not found' },
-        { status: 404 }
-      )
+      return NextResponse.json({ error: "Team not found" }, { status: 404 });
     }
 
     // Use provided patientName or default to team's patient name
-    const finalPatientName = patientName || 
-      (team.patient 
-        ? (team.patient.name || `${team.patient.firstName || ''} ${team.patient.lastName || ''}`.trim())
-        : null)
+    const finalPatientName =
+      patientName ||
+      (team.patient
+        ? team.patient.name ||
+          `${team.patient.firstName || ""} ${team.patient.lastName || ""}`.trim()
+        : null);
 
     // Create task
     const task = await prisma.task.create({
@@ -231,8 +197,8 @@ export async function POST(
         patientName: finalPatientName,
         createdById: user.id,
         assignedToId: assignedToId || null,
-        priority: (priority as TaskPriority) || 'MEDIUM',
-        status: (status as TaskStatus) || 'TODO',
+        priority: (priority as TaskPriority) || "MEDIUM",
+        status: (status as TaskStatus) || "TODO",
         dueDate: dueDate ? new Date(dueDate) : null,
       },
       include: {
@@ -257,20 +223,22 @@ export async function POST(
           },
         },
       },
-    })
+    });
 
-    const response = NextResponse.json({ task }, { status: 201 })
-    addRateLimitHeaders(response.headers, rateLimitResult.limit, rateLimitResult.remaining, rateLimitResult.reset)
-    return response
+    const response = NextResponse.json({ task }, { status: 201 });
+    addRateLimitHeaders(
+      response.headers,
+      rateLimitResult.limit,
+      rateLimitResult.remaining,
+      rateLimitResult.reset,
+    );
+    return response;
   } catch (error) {
-    console.error('Error creating task:', error)
-    return NextResponse.json(
-      {
-        error: 'Error creating task',
-        details: error instanceof Error ? error.message : String(error),
-      },
-      { status: 500 }
-    )
+    const teamId = await extractTeamId(params);
+    return createInternalErrorResponse(error, {
+      endpoint: "/api/teams/[teamId]/tasks",
+      method: "POST",
+      teamId,
+    });
   }
 }
-
