@@ -3,6 +3,8 @@ import { prisma } from '@/lib/prisma'
 import { NextResponse } from 'next/server'
 import { randomBytes } from 'crypto'
 import { sendInviteEmail } from '@/lib/email'
+import { log, loggerUtils } from '@/lib/logger'
+import { createInternalErrorResponse } from '@/lib/error-handler'
 
 export async function POST(req: Request) {
   try {
@@ -240,9 +242,9 @@ export async function POST(req: Request) {
         inviteCode: result.patientInviteCode,
         success: patientEmailResult.success 
       })
-      console.log(`📧 Patient invite sent to ${TEST_EMAIL} with code: ${result.patientInviteCode}`)
+      log.info({ type: 'onboarding_patient_invite_sent', email: TEST_EMAIL, inviteCode: result.patientInviteCode }, 'Patient invite sent')
     } catch (error) {
-      console.error('Error sending patient invite email:', error)
+      loggerUtils.logError(error, { type: 'onboarding_patient_invite_error', email: patientEmail })
       emailResults.push({ email: patientEmail, success: false, error: String(error) })
     }
 
@@ -264,14 +266,14 @@ export async function POST(req: Request) {
           inviteCode: invite.inviteCode,
           success: emailResult.success 
         })
-        console.log(`📧 Team member invite sent to ${TEST_EMAIL} with code: ${invite.inviteCode}`)
+        log.info({ type: 'onboarding_team_invite_sent', email: TEST_EMAIL, inviteCode: invite.inviteCode }, 'Team member invite sent')
       } catch (error) {
-        console.error(`Error sending invite email to ${invite.email}:`, error)
+        loggerUtils.logError(error, { type: 'onboarding_team_invite_error', email: invite.email })
         emailResults.push({ email: invite.email, success: false, error: String(error) })
       }
     }
 
-    console.log('Email sending results:', emailResults)
+    log.info({ type: 'onboarding_email_results', results: emailResults }, 'Email sending completed')
     
     // Collect all invite codes for testing
     const allInviteCodes: Array<{ code: string; url: string; role: string }> = []
@@ -298,13 +300,10 @@ export async function POST(req: Request) {
       }
     })
     
-    // Log all invite codes for testing
-    console.log('\n📋 TESTING: All invite codes sent to lakgarg2002@gmail.com:')
-    allInviteCodes.forEach((invite) => {
-      console.log(`  - Code: ${invite.code} (${invite.role})`)
-      console.log(`    URL: ${invite.url}`)
-    })
-    console.log('')
+    // Log all invite codes for testing (in development only)
+    if (process.env.NODE_ENV === 'development') {
+      log.info({ type: 'onboarding_invite_codes', codes: allInviteCodes }, 'All invite codes generated')
+    }
 
     return NextResponse.json({
       success: true,
@@ -316,14 +315,10 @@ export async function POST(req: Request) {
       inviteCodes: allInviteCodes,
     })
   } catch (error) {
-    console.error('Error completing onboarding:', error)
-    return NextResponse.json(
-      {
-        error: 'Error completing onboarding',
-        details: error instanceof Error ? error.message : String(error),
-      },
-      { status: 500 }
-    )
+    return createInternalErrorResponse(error, {
+      endpoint: "/api/onboarding",
+      method: "POST",
+    })
   }
 }
 

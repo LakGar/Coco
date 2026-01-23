@@ -1,47 +1,31 @@
-import { auth } from '@clerk/nextjs/server'
+import { requireAuth, isAuthError } from '@/lib/auth-middleware'
 import { prisma } from '@/lib/prisma'
 import { NextResponse } from 'next/server'
+import { createNotFoundErrorResponse, createInternalErrorResponse } from '@/lib/error-handler'
 
 export async function GET() {
   try {
-    const { userId } = await auth()
+    const authResult = await requireAuth()
 
-    if (!userId) {
-      return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      )
+    if (isAuthError(authResult)) {
+      return authResult.response
     }
 
-    const user = await prisma.user.findUnique({
-      where: { clerkId: userId },
-      select: {
-        id: true,
-        name: true,
-        firstName: true,
-        lastName: true,
-        email: true,
-        imageUrl: true,
-      },
-    })
+    const { user } = authResult
 
-    if (!user) {
-      return NextResponse.json(
-        { error: 'User not found' },
-        { status: 404 }
-      )
-    }
-
-    return NextResponse.json({ user })
+    return NextResponse.json({ user: {
+      id: user.id,
+      name: user.name,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      email: user.email,
+      imageUrl: user.imageUrl,
+    } })
   } catch (error) {
-    console.error('Error fetching user profile:', error)
-    return NextResponse.json(
-      {
-        error: 'Error fetching user profile',
-        details: error instanceof Error ? error.message : String(error),
-      },
-      { status: 500 }
-    )
+    return createInternalErrorResponse(error, {
+      endpoint: "/api/user/profile",
+      method: "GET",
+    })
   }
 }
 

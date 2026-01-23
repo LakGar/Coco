@@ -2,17 +2,20 @@ import { Webhook } from 'svix'
 import { headers } from 'next/headers'
 import { WebhookEvent } from '@clerk/nextjs/server'
 import { prisma } from '@/lib/prisma'
+import { log, loggerUtils } from '@/lib/logger'
 
 export async function POST(req: Request) {
   // You can find this in the Clerk Dashboard -> Webhooks -> choose the webhook
   const WEBHOOK_SECRET = process.env.WEBHOOK_SECRET
 
   if (!WEBHOOK_SECRET) {
-    console.error('WEBHOOK_SECRET is missing from environment variables')
+    loggerUtils.logError(new Error('WEBHOOK_SECRET is missing from environment variables'), {
+      type: 'webhook_config_error',
+    })
     throw new Error('Please add WEBHOOK_SECRET from Clerk Dashboard to .env.local')
   }
 
-  console.log('Webhook received - checking headers...')
+  log.debug({ type: 'webhook_received' }, 'Webhook received - checking headers')
 
   // Get the headers
   const headerPayload = await headers()
@@ -44,7 +47,7 @@ export async function POST(req: Request) {
       'svix-signature': svix_signature,
     }) as WebhookEvent
   } catch (err) {
-    console.error('Error verifying webhook:', err)
+    loggerUtils.logError(err, { type: 'webhook_verification_error' })
     return new Response('Error occured', {
       status: 400,
     })
@@ -52,7 +55,7 @@ export async function POST(req: Request) {
 
   // Handle the webhook
   const eventType = evt.type
-  console.log(`Processing webhook event: ${eventType}`)
+  log.info({ type: 'webhook_event', eventType }, `Processing webhook event: ${eventType}`)
 
   if (eventType === 'user.created') {
     const { id, email_addresses, first_name, last_name, image_url } = evt.data
@@ -69,9 +72,9 @@ export async function POST(req: Request) {
           onboardingComplete: false,
         },
       })
-      console.log(`User created successfully in database: ${user.id} (Clerk ID: ${id})`)
+      log.info({ type: 'webhook_user_created', userId: user.id, clerkId: id }, 'User created successfully in database')
     } catch (error) {
-      console.error('Error creating user:', error)
+      loggerUtils.logError(error, { type: 'webhook_user_create_error', clerkId: id })
       // Return more detailed error for debugging
       return new Response(
         JSON.stringify({ error: 'Error creating user', details: error instanceof Error ? error.message : String(error) }),
@@ -93,8 +96,9 @@ export async function POST(req: Request) {
           imageUrl: image_url || null,
         },
       })
+      log.info({ type: 'webhook_user_updated', clerkId: id }, 'User updated successfully')
     } catch (error) {
-      console.error('Error updating user:', error)
+      loggerUtils.logError(error, { type: 'webhook_user_update_error', clerkId: id })
       return new Response('Error updating user', { status: 500 })
     }
   }
@@ -106,8 +110,9 @@ export async function POST(req: Request) {
       await prisma.user.delete({
         where: { clerkId: id },
       })
+      log.info({ type: 'webhook_user_deleted', clerkId: id }, 'User deleted successfully')
     } catch (error) {
-      console.error('Error deleting user:', error)
+      loggerUtils.logError(error, { type: 'webhook_user_delete_error', clerkId: id })
       return new Response('Error deleting user', { status: 500 })
     }
   }

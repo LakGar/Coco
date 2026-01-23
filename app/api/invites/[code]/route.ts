@@ -1,5 +1,6 @@
 import { prisma } from '@/lib/prisma'
 import { NextResponse } from 'next/server'
+import { createInternalErrorResponse } from '@/lib/error-handler'
 
 export async function GET(
   req: Request,
@@ -87,14 +88,13 @@ export async function GET(
       accessLevel: invite.accessLevel,
     })
   } catch (error) {
-    console.error('Error fetching invite:', error)
-    return NextResponse.json(
-      {
-        error: 'Error fetching invite details',
-        details: error instanceof Error ? error.message : String(error),
-      },
-      { status: 500 }
-    )
+    const resolvedParams = params instanceof Promise ? await params : params
+    const { code } = resolvedParams
+    return createInternalErrorResponse(error, {
+      endpoint: "/api/invites/[code]",
+      method: "GET",
+      inviteCode: code,
+    })
   }
 }
 

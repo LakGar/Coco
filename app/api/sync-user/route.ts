@@ -1,6 +1,8 @@
+import { requireAuth, isAuthError } from '@/lib/auth-middleware'
 import { auth, currentUser } from '@clerk/nextjs/server'
 import { prisma } from '@/lib/prisma'
 import { NextResponse } from 'next/server'
+import { createNotFoundErrorResponse, createInternalErrorResponse } from '@/lib/error-handler'
 
 /**
  * Manual sync endpoint to sync current Clerk user to database
@@ -8,23 +10,22 @@ import { NextResponse } from 'next/server'
  */
 export async function POST() {
   try {
-    const { userId } = await auth()
+    const authResult = await requireAuth()
 
-    if (!userId) {
-      return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      )
+    if (isAuthError(authResult)) {
+      return authResult.response
     }
+
+    const { userId } = await auth()
 
     // Get full user data from Clerk
     const clerkUser = await currentUser()
 
     if (!clerkUser) {
-      return NextResponse.json(
-        { error: 'User not found in Clerk' },
-        { status: 404 }
-      )
+      return createNotFoundErrorResponse("User not found in Clerk", {
+        endpoint: "/api/sync-user",
+        method: "POST",
+      })
     }
 
     // Check if user already exists
@@ -68,14 +69,10 @@ export async function POST() {
       })
     }
   } catch (error) {
-    console.error('Error syncing user:', error)
-    return NextResponse.json(
-      {
-        error: 'Error syncing user',
-        details: error instanceof Error ? error.message : String(error),
-      },
-      { status: 500 }
-    )
+    return createInternalErrorResponse(error, {
+      endpoint: "/api/sync-user",
+      method: "POST",
+    })
   }
 }
 

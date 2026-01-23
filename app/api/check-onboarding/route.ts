@@ -1,20 +1,25 @@
-import { auth } from '@clerk/nextjs/server'
+import { requireAuth, isAuthError } from '@/lib/auth-middleware'
 import { prisma } from '@/lib/prisma'
 import { NextResponse } from 'next/server'
+import { createInternalErrorResponse } from '@/lib/error-handler'
 
 export async function GET() {
   try {
-    const { userId } = await auth()
+    const authResult = await requireAuth()
 
-    if (!userId) {
-      return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      )
+    if (isAuthError(authResult)) {
+      // If not authenticated, return onboarding incomplete
+      return NextResponse.json({
+        onboardingComplete: false,
+        userExists: false,
+        isExistingTeamMember: false,
+      })
     }
 
+    const { user: currentUser } = authResult
+
     const user = await prisma.user.findUnique({
-      where: { clerkId: userId },
+      where: { id: currentUser.id },
       select: {
         onboardingComplete: true,
         teamMemberships: {
@@ -43,14 +48,10 @@ export async function GET() {
       isExistingTeamMember: user.teamMemberships.length > 0,
     })
   } catch (error) {
-    console.error('Error checking onboarding status:', error)
-    return NextResponse.json(
-      {
-        error: 'Error checking onboarding status',
-        details: error instanceof Error ? error.message : String(error),
-      },
-      { status: 500 }
-    )
+    return createInternalErrorResponse(error, {
+      endpoint: "/api/check-onboarding",
+      method: "GET",
+    })
   }
 }
 

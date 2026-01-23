@@ -1,21 +1,21 @@
-import { auth } from '@clerk/nextjs/server'
+import { requireAuth, isAuthError } from '@/lib/auth-middleware'
 import { prisma } from '@/lib/prisma'
 import { NextResponse } from 'next/server'
+import { createNotFoundErrorResponse, createInternalErrorResponse } from '@/lib/error-handler'
 
 export async function GET() {
   try {
-    const { userId } = await auth()
+    const authResult = await requireAuth()
 
-    if (!userId) {
-      return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      )
+    if (isAuthError(authResult)) {
+      return authResult.response
     }
 
-    // Get user from database
+    const { user: currentUser } = authResult
+
+    // Get user from database with team memberships
     const user = await prisma.user.findUnique({
-      where: { clerkId: userId },
+      where: { id: currentUser.id },
       include: {
         teamMemberships: {
           where: {
@@ -48,10 +48,10 @@ export async function GET() {
     })
 
     if (!user) {
-      return NextResponse.json(
-        { error: 'User not found' },
-        { status: 404 }
-      )
+      return createNotFoundErrorResponse("User not found", {
+        endpoint: "/api/teams",
+        method: "GET",
+      })
     }
 
     // Format teams for the frontend
@@ -71,14 +71,10 @@ export async function GET() {
       teams,
     })
   } catch (error) {
-    console.error('Error fetching teams:', error)
-    return NextResponse.json(
-      {
-        error: 'Error fetching teams',
-        details: error instanceof Error ? error.message : String(error),
-      },
-      { status: 500 }
-    )
+    return createInternalErrorResponse(error, {
+      endpoint: "/api/teams",
+      method: "GET",
+    })
   }
 }
 

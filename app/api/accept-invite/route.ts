@@ -1,6 +1,8 @@
 import { auth, currentUser } from '@clerk/nextjs/server'
 import { prisma } from '@/lib/prisma'
 import { NextResponse } from 'next/server'
+import { log, loggerUtils } from '@/lib/logger'
+import { createInternalErrorResponse } from '@/lib/error-handler'
 
 export async function POST(req: Request) {
   try {
@@ -47,15 +49,7 @@ export async function POST(req: Request) {
     }
 
     // Log for debugging
-    console.log(`[ACCEPT-INVITE] Initial invite lookup:`, {
-      inviteId: invite.id,
-      inviteCode: invite.inviteCode,
-      teamRole: invite.teamRole,
-      teamId: invite.teamId,
-      userId: invite.userId,
-      inviteEmail: invite.inviteEmail,
-      requestedCode: inviteCode,
-    })
+    log.debug({ type: 'accept_invite_lookup', inviteId: invite.id, inviteCode: invite.inviteCode, teamId: invite.teamId }, 'Initial invite lookup')
 
     // Check if invite is expired (7 days)
     if (invite.invitedAt) {
@@ -99,14 +93,7 @@ export async function POST(req: Request) {
       }
 
       // Log for debugging
-      console.log(`[ACCEPT-INVITE] Processing invite:`, {
-        inviteId: currentInvite.id,
-        inviteCode: currentInvite.inviteCode,
-        teamRole: currentInvite.teamRole,
-        currentUserId: currentInvite.userId,
-        acceptedAt: currentInvite.acceptedAt,
-        clerkUserId: userId,
-      })
+      log.debug({ type: 'accept_invite_processing', inviteId: currentInvite.id, inviteCode: currentInvite.inviteCode, teamRole: currentInvite.teamRole }, 'Processing invite')
 
       if (currentInvite.acceptedAt) {
         throw new Error('This invitation has already been accepted')
@@ -159,28 +146,15 @@ export async function POST(req: Request) {
         },
       })
 
-      console.log(`[ACCEPT-INVITE] After update verification:`, {
-        inviteId: verifyUpdate?.id,
-        inviteCode: verifyUpdate?.inviteCode,
-        teamRole: verifyUpdate?.teamRole,
-        userId: verifyUpdate?.userId,
-        expectedUserId: user.id,
-        match: verifyUpdate?.userId === user.id,
-      })
+      log.debug({ type: 'accept_invite_verification', inviteId: verifyUpdate?.id, userId: verifyUpdate?.userId, expectedUserId: user.id, match: verifyUpdate?.userId === user.id }, 'After update verification')
 
       if (!verifyUpdate || verifyUpdate.userId !== user.id) {
-        console.error(`[ACCEPT-INVITE] ERROR: Update verification failed!`, {
-          verifyUpdate,
-          expectedUserId: user.id,
-        })
+        loggerUtils.logError(new Error('Update verification failed'), { type: 'accept_invite_verification_failed', verifyUpdate, expectedUserId: user.id })
         throw new Error('Failed to update invite record correctly')
       }
 
       if (verifyUpdate.teamRole !== currentInvite.teamRole) {
-        console.error(`[ACCEPT-INVITE] ERROR: Role mismatch!`, {
-          expectedRole: currentInvite.teamRole,
-          actualRole: verifyUpdate.teamRole,
-        })
+        loggerUtils.logError(new Error('Role mismatch'), { type: 'accept_invite_role_mismatch', expectedRole: currentInvite.teamRole, actualRole: verifyUpdate.teamRole })
         throw new Error('Invite role mismatch - wrong record updated')
       }
 
@@ -214,14 +188,10 @@ export async function POST(req: Request) {
       role: invite.teamRole,
     })
   } catch (error) {
-    console.error('Error accepting invite:', error)
-    return NextResponse.json(
-      {
-        error: 'Error accepting invite',
-        details: error instanceof Error ? error.message : String(error),
-      },
-      { status: 500 }
-    )
+    return createInternalErrorResponse(error, {
+      endpoint: "/api/accept-invite",
+      method: "POST",
+    })
   }
 }
 

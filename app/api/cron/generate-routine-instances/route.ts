@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { log, loggerUtils } from '@/lib/logger'
 
 /**
  * Background job to generate routine instances and tasks
@@ -37,7 +38,7 @@ export async function POST(req: Request) {
     const endDate = new Date(today)
     endDate.setDate(endDate.getDate() + daysAhead)
 
-    console.log(`[Cron] Generating routine instances from ${today.toISOString()} to ${endDate.toISOString()}`)
+    log.info({ type: 'cron_start', startDate: today.toISOString(), endDate: endDate.toISOString() }, 'Generating routine instances')
 
     // Get all active routines
     const activeRoutines = await prisma.routine.findMany({
@@ -141,7 +142,7 @@ export async function POST(req: Request) {
         }
       } catch (error) {
         const errorMessage = `Error processing routine ${routine.id}: ${error instanceof Error ? error.message : String(error)}`
-        console.error(errorMessage)
+        loggerUtils.logError(error, { type: 'cron_routine_error', routineId: routine.id })
         errors.push(errorMessage)
       }
     }
@@ -155,7 +156,7 @@ export async function POST(req: Request) {
       errors: errors.length > 0 ? errors : undefined,
     })
   } catch (error) {
-    console.error('[Cron] Error generating routine instances:', error)
+    loggerUtils.logError(error, { type: 'cron_error' })
     return NextResponse.json(
       {
         error: 'Error generating routine instances',
