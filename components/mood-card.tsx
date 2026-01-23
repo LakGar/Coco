@@ -105,7 +105,9 @@ export function MoodCard({ teamId, latestMood, onMoodTracked }: MoodCardProps) {
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}))
-        console.error("Mood save error:", errorData)
+        if (process.env.NODE_ENV === 'development') {
+          console.error("Mood save error:", errorData)
+        }
         throw new Error(errorData.details || errorData.error || "Failed to save mood")
       }
 
@@ -123,7 +125,9 @@ export function MoodCard({ teamId, latestMood, onMoodTracked }: MoodCardProps) {
         }, 800)
       }
     } catch (error) {
-      console.error("Error saving mood:", error)
+      if (process.env.NODE_ENV === 'development') {
+        console.error("Error saving mood:", error)
+      }
       toast.error("Failed to save mood")
     } finally {
       setSaving(false)
@@ -167,7 +171,9 @@ export function MoodCard({ teamId, latestMood, onMoodTracked }: MoodCardProps) {
       setKeepOpenForNotes(false)
       onMoodTracked?.()
     } catch (error) {
-      console.error("Error saving notes:", error)
+      if (process.env.NODE_ENV === 'development') {
+        console.error("Error saving notes:", error)
+      }
       toast.error("Failed to save notes")
     } finally {
       setSaving(false)

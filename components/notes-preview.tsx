@@ -91,7 +91,9 @@ export function NotesPreview({ onAddNote }: NotesPreviewProps) {
         // Fetch notes
         await fetchNotes(activeTeam.id)
       } catch (error) {
-        console.error("Error fetching data:", error)
+        if (process.env.NODE_ENV === 'development') {
+          console.error("Error fetching data:", error)
+        }
       } finally {
         setLoading(false)
       }

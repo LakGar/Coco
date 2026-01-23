@@ -203,7 +203,9 @@ export function RoutineForm({
       onOpenChange(false)
       onSuccess?.()
     } catch (error) {
-      console.error("Error saving routine:", error)
+      if (process.env.NODE_ENV === 'development') {
+        console.error("Error saving routine:", error)
+      }
       toast.error(error instanceof Error ? error.message : "Failed to save routine")
     } finally {
       setLoading(false)
@@ -221,7 +223,10 @@ export function RoutineForm({
       onDelete(routine.id)
       onOpenChange(false)
     } catch (error) {
-      console.error("Error deleting routine:", error)
+      if (process.env.NODE_ENV === 'development') {
+        console.error("Error deleting routine:", error)
+      }
+      toast.error("Failed to delete routine")
     }
   }
 

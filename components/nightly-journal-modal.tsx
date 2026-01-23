@@ -121,7 +121,9 @@ export function NightlyJournalModal({
       toast.success("Journal entry saved!")
       onOpenChange(false)
     } catch (error) {
-      console.error("Error saving journal entry:", error)
+      if (process.env.NODE_ENV === 'development') {
+        console.error("Error saving journal entry:", error)
+      }
       toast.error("Failed to save journal entry")
     } finally {
       setSaving(false)

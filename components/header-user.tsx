@@ -58,7 +58,9 @@ export function HeaderUser() {
           setPrismaUser(data.user)
         }
       } catch (error) {
-        console.error('Error fetching user profile:', error)
+        if (process.env.NODE_ENV === 'development') {
+          console.error('Error fetching user profile:', error)
+        }
       } finally {
         setLoadingUser(false)
       }

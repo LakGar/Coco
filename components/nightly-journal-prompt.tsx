@@ -120,13 +120,17 @@ export function NightlyJournalPrompt() {
               }
             }
           } catch (error) {
-            console.error("Error fetching last entry:", error)
+            if (process.env.NODE_ENV === 'development') {
+              console.error("Error fetching last entry:", error)
+            }
           }
           
           setShowModal(true)
         }
       } catch (error) {
-        console.error("Error checking routines:", error)
+        if (process.env.NODE_ENV === 'development') {
+          console.error("Error checking routines:", error)
+        }
       } finally {
         setLoading(false)
         setHasCheckedToday(true)
@@ -163,7 +167,9 @@ export function NightlyJournalPrompt() {
       setShowModal(false)
       setHasCheckedToday(false) // Allow checking again if needed
     } catch (error) {
-      console.error("Error saving journal entry:", error)
+      if (process.env.NODE_ENV === 'development') {
+        console.error("Error saving journal entry:", error)
+      }
       throw error
     }
   }

@@ -20,6 +20,14 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import { toast } from "sonner"
 import { Trash2 } from "lucide-react"
 
@@ -64,6 +72,7 @@ export function TaskForm({
   onDelete,
 }: TaskFormProps) {
   const [loading, setLoading] = React.useState(false)
+  const [deleteDialogOpen, setDeleteDialogOpen] = React.useState(false)
   const [formData, setFormData] = React.useState({
     name: "",
     description: "",
@@ -155,25 +164,35 @@ export function TaskForm({
       onOpenChange(false)
       onSuccess?.()
     } catch (error) {
-      console.error("Error saving task:", error)
+      // Error is already handled by toast notification
+      // In production, you might want to log to an error reporting service
+      if (process.env.NODE_ENV === 'development') {
+        console.error("Error saving task:", error)
+      }
       toast.error(error instanceof Error ? error.message : "Failed to save task")
     } finally {
       setLoading(false)
     }
   }
 
-  const handleDelete = async () => {
+  const handleDeleteClick = () => {
     if (!task?.id || !onDelete) return
+    setDeleteDialogOpen(true)
+  }
 
-    if (!confirm(`Are you sure you want to delete "${task.name}"? This action cannot be undone.`)) {
-      return
-    }
+  const handleDeleteConfirm = async () => {
+    if (!task?.id || !onDelete) return
 
     try {
       onDelete(task.id)
+      setDeleteDialogOpen(false)
       onOpenChange(false)
     } catch (error) {
-      console.error("Error deleting task:", error)
+      // Error is handled by onDelete callback
+      if (process.env.NODE_ENV === 'development') {
+        console.error("Error deleting task:", error)
+      }
+      toast.error("Failed to delete task")
     }
   }
 
@@ -339,7 +358,7 @@ export function TaskForm({
               <Button
                 type="button"
                 variant="destructive"
-                onClick={handleDelete}
+                onClick={handleDeleteClick}
                 disabled={loading}
               >
                 <Trash2 className="h-4 w-4 mr-2" />
@@ -361,6 +380,32 @@ export function TaskForm({
           </SheetFooter>
         </form>
       </SheetContent>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete Task</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete "{task?.name}"? This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setDeleteDialogOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleDeleteConfirm}
+            >
+              Delete Task
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Sheet>
   )
 }
