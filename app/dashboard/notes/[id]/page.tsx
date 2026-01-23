@@ -403,20 +403,23 @@ export default function NoteDetailPage() {
                       Edit
                     </Button>
                   )}
+                  {note.userRole === "creator" && (
+                    <Button
+                      variant="outline"
+                      onClick={() => setPermissionsDialogOpen(true)}
+                    >
+                      <UserPlus className="mr-2 h-4 w-4" />
+                      Permissions
+                    </Button>
+                  )}
                   {note.canDelete && (
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
                         <Button variant="outline" size="icon">
-                          <Users className="h-4 w-4" />
+                          <Trash2 className="h-4 w-4" />
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
-                        <DropdownMenuItem
-                          onClick={() => setPermissionsDialogOpen(true)}
-                        >
-                          <UserPlus className="mr-2 h-4 w-4" />
-                          Manage Permissions
-                        </DropdownMenuItem>
                         <DropdownMenuItem
                           onClick={() => setDeleteDialogOpen(true)}
                           className="text-destructive"

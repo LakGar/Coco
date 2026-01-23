@@ -6,6 +6,7 @@ import { SidebarInset } from '@/components/ui/sidebar'
 import { SidebarTrigger } from '@/components/ui/sidebar'
 import { HeaderUser } from '@/components/header-user'
 import { NightlyJournalPrompt } from '@/components/nightly-journal-prompt'
+import { ErrorBoundaryWrapper } from '@/components/error-boundary-wrapper'
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -20,7 +21,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             </div>
           </header>
           <div className="flex flex-1 flex-col overflow-hidden w-full">
-            {children}
+            <ErrorBoundaryWrapper>
+              {children}
+            </ErrorBoundaryWrapper>
             <NightlyJournalPrompt />
           </div>
         </SidebarInset>
