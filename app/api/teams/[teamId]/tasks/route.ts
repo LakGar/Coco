@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
-import { TaskPriority, TaskStatus } from "@prisma/client";
+import { TaskPriority, TaskStatus, TaskType } from "@prisma/client";
 import {
   createTaskSchema,
   validateRequest,
@@ -159,6 +159,7 @@ export async function POST(
       assignedToId,
       priority,
       status,
+      type,
       dueDate,
     } = validation.data;
 
@@ -199,6 +200,7 @@ export async function POST(
         assignedToId: assignedToId || null,
         priority: (priority as TaskPriority) || "MEDIUM",
         status: (status as TaskStatus) || "TODO",
+        type: type ? (type as TaskType) : null,
         dueDate: dueDate ? new Date(dueDate) : null,
       },
       include: {

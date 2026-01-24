@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Clock, ArrowRight } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { format, startOfDay, addDays } from "date-fns"
+import { getTaskTypeIcon, getTaskTypeColor, type TaskType } from "@/lib/task-types"
 
 interface Task {
   id: string
@@ -14,6 +15,7 @@ interface Task {
   dueDate?: string | null
   status: "TODO" | "DONE" | "CANCELLED" | "DUE"
   priority: "LOW" | "MEDIUM" | "HIGH" | "URGENT"
+  type?: TaskType
 }
 
 interface UpcomingTasksPreviewProps {
@@ -117,7 +119,17 @@ export function UpcomingTasksPreview({
                   onClick={() => handleTaskClick(task.id)}
                   className="w-full flex items-center gap-3 p-2.5 rounded-lg hover:bg-muted/50 transition-colors text-left group border border-transparent hover:border-border/50"
                 >
-                  <Clock className="h-3.5 w-3.5 text-indigo-600 shrink-0" />
+                  {task.type ? (() => {
+                    const TypeIcon = getTaskTypeIcon(task.type)
+                    const typeColor = getTaskTypeColor(task.type)
+                    return TypeIcon ? (
+                      <TypeIcon className={`h-3.5 w-3.5 shrink-0 ${typeColor}`} />
+                    ) : (
+                      <Clock className="h-3.5 w-3.5 text-indigo-600 shrink-0" />
+                    )
+                  })() : (
+                    <Clock className="h-3.5 w-3.5 text-indigo-600 shrink-0" />
+                  )}
                   <div className="flex-1 min-w-0">
                     <p className="text-sm text-foreground">
                       {task.name}

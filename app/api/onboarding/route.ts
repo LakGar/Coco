@@ -35,6 +35,7 @@ export async function POST(req: Request) {
       patientName,
       patientEmail,
       teamMembers,
+      journalQuestions,
     } = body
 
     // Validate required fields
@@ -187,6 +188,33 @@ export async function POST(req: Request) {
         })
       }
 
+      // Create daily journal routine if journal questions were provided
+      if (journalQuestions && Array.isArray(journalQuestions) && journalQuestions.length > 0) {
+        const today = new Date()
+        const startDate = new Date(today.getFullYear(), today.getMonth(), today.getDate())
+        
+        await tx.routine.create({
+          data: {
+            name: "Daily Journal",
+            description: "Daily activities and health tracking",
+            teamId: careTeam.id,
+            patientName: patientName,
+            createdById: user.id,
+            checklistItems: journalQuestions,
+            recurrenceDaysOfWeek: [0, 1, 2, 3, 4, 5, 6], // Daily
+            startDate: startDate,
+            endDate: null, // Repeat indefinitely
+            isActive: true,
+          },
+        })
+
+        log.info({
+          type: 'onboarding_routine_created',
+          teamId: careTeam.id,
+          questionCount: journalQuestions.length,
+        }, 'Daily journal routine created during onboarding')
+      }
+
       // Mark onboarding as complete
       await tx.user.update({
         where: { clerkId: userId },
@@ -227,25 +255,27 @@ export async function POST(req: Request) {
     const emailResults = []
     
     // Send email to patient (testing - send to test email)
-    try {
-      const patientEmailResult = await sendInviteEmail({
-        to: TEST_EMAIL, // Testing: override with test email
-        inviteCode: result.patientInviteCode,
-        inviterName: `${firstName} ${lastName}`,
-        teamName: result.careTeam.name,
-        role: 'PATIENT',
-        isPatient: true,
-      })
-      emailResults.push({ 
-        email: patientEmail, 
-        actualEmail: TEST_EMAIL,
-        inviteCode: result.patientInviteCode,
-        success: patientEmailResult.success 
-      })
-      log.info({ type: 'onboarding_patient_invite_sent', email: TEST_EMAIL, inviteCode: result.patientInviteCode }, 'Patient invite sent')
-    } catch (error) {
-      loggerUtils.logError(error, { type: 'onboarding_patient_invite_error', email: patientEmail })
-      emailResults.push({ email: patientEmail, success: false, error: String(error) })
+    if (result.patientInviteCode) {
+      try {
+        const patientEmailResult = await sendInviteEmail({
+          to: TEST_EMAIL, // Testing: override with test email
+          inviteCode: result.patientInviteCode,
+          inviterName: `${firstName} ${lastName}`,
+          teamName: result.careTeam.name,
+          role: 'PATIENT',
+          isPatient: true,
+        })
+        emailResults.push({ 
+          email: patientEmail, 
+          actualEmail: TEST_EMAIL,
+          inviteCode: result.patientInviteCode,
+          success: patientEmailResult.success 
+        })
+        log.info({ type: 'onboarding_patient_invite_sent', email: TEST_EMAIL, inviteCode: result.patientInviteCode }, 'Patient invite sent')
+      } catch (error) {
+        loggerUtils.logError(error, { type: 'onboarding_patient_invite_error', email: patientEmail })
+        emailResults.push({ email: patientEmail, success: false, error: String(error) })
+      }
     }
 
     // Send emails to team members (testing - send all to test email)
@@ -258,7 +288,7 @@ export async function POST(req: Request) {
           teamName: result.careTeam.name,
           role: invite.role || 'CAREGIVER',
           isPatient: false,
-          invitedName: invite.name, // Use the name from the form
+          invitedName: invite.name || null, // Use the name from the form
         })
         emailResults.push({ 
           email: invite.email, 

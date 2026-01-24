@@ -30,6 +30,7 @@ import {
 } from "@/components/ui/dialog"
 import { toast } from "sonner"
 import { Trash2 } from "lucide-react"
+import { taskTypes, type TaskType } from "@/lib/task-types"
 
 interface Task {
   id?: string
@@ -39,6 +40,7 @@ interface Task {
   assignedToId?: string | null
   priority: "LOW" | "MEDIUM" | "HIGH" | "URGENT"
   status: "TODO" | "DONE" | "CANCELLED" | "DUE"
+  type?: TaskType
   dueDate?: string | null
   createdBy?: {
     id: string
@@ -80,6 +82,7 @@ export function TaskForm({
     assignedToId: "",
     priority: "MEDIUM" as "LOW" | "MEDIUM" | "HIGH" | "URGENT",
     status: "TODO" as "TODO" | "DONE" | "CANCELLED" | "DUE",
+    type: null as TaskType,
     dueDate: "",
     dueTime: "",
   })
@@ -97,6 +100,7 @@ export function TaskForm({
           assignedToId: task.assignedToId || "",
           priority: task.priority || "MEDIUM",
           status: task.status || "TODO",
+          type: task.type || null,
           dueDate: dueDate ? dueDate.toISOString().split("T")[0] : "",
           dueTime: dueDate ? dueDate.toTimeString().slice(0, 5) : "",
         })
@@ -109,6 +113,7 @@ export function TaskForm({
           assignedToId: "",
           priority: "MEDIUM",
           status: "TODO",
+          type: null,
           dueDate: "",
           dueTime: "",
         })
@@ -138,6 +143,7 @@ export function TaskForm({
         assignedToId: formData.assignedToId || null,
         priority: formData.priority,
         status: formData.status,
+        type: formData.type || null,
         dueDate: dueDate,
       }
 
@@ -249,6 +255,36 @@ export function TaskForm({
                   }
                   placeholder="Patient name (optional)"
                 />
+              </FieldContent>
+            </Field>
+
+            <Field>
+              <FieldLabel>Task Type (Optional)</FieldLabel>
+              <FieldContent>
+                <Select
+                  value={formData.type || "none"}
+                  onValueChange={(value) =>
+                    setFormData({ ...formData, type: value === "none" ? null : value as TaskType })
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select task type" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">None</SelectItem>
+                    {taskTypes.map((taskType) => {
+                      const Icon = taskType.icon
+                      return (
+                        <SelectItem key={taskType.value} value={taskType.value || ""}>
+                          <div className="flex items-center gap-2">
+                            <Icon className={`h-4 w-4 ${taskType.color}`} />
+                            <span>{taskType.label}</span>
+                          </div>
+                        </SelectItem>
+                      )
+                    })}
+                  </SelectContent>
+                </Select>
               </FieldContent>
             </Field>
 

@@ -43,6 +43,13 @@ enum TaskStatus {
   DUE
 }
 
+enum TaskType {
+  MEDICATION
+  APPOINTMENTS
+  SOCIAL
+  HEALTH_PERSONAL
+}
+
 enum MoodRating {
   // Positive / Neutral
   CALM
@@ -111,6 +118,12 @@ model User {
   // notes last edited by this user
   lastEditedNotes Note[] @relation("LastEditedNotes")
 
+  // contacts created by this user
+  createdContacts Contact[] @relation("CreatedContacts")
+
+  // notifications for this user
+  notifications Notification[] @relation("Notifications")
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
@@ -129,6 +142,8 @@ model CareTeam {
   routines Routine[]
   moods    Mood[]
   notes    Note[]
+  contacts Contact[]
+  notifications Notification[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -186,6 +201,7 @@ model Task {
 
   priority TaskPriority @default(MEDIUM)
   status   TaskStatus   @default(TODO)
+  type     TaskType?    // Optional task type (MEDICATION, APPOINTMENTS, SOCIAL, HEALTH_PERSONAL)
 
   dueDate DateTime? // Optional due date and time
 
@@ -199,6 +215,7 @@ model Task {
   @@index([assignedToId])
   @@index([status])
   @@index([priority])
+  @@index([type])
 }
 
 model Routine {
@@ -350,4 +367,74 @@ model NoteViewer {
   @@unique([noteId, userId])
   @@index([noteId])
   @@index([userId])
+}
+
+enum ContactType {
+  EMERGENCY_CONTACT
+  EMERGENCY_SERVICES
+  SUPPORT_GROUP
+  PHYSICIAN
+  PHARMACY
+  INSURANCE
+  OTHER
+}
+
+enum NotificationType {
+  CONTACT_SETUP_REMINDER
+  TASK_DUE
+  ROUTINE_MISSED
+  TEAM_INVITE
+  PERMISSION_CHANGE
+  SYSTEM_ALERT
+}
+
+model Contact {
+  id          String      @id @default(cuid())
+  teamId      String
+  team        CareTeam    @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  
+  type        ContactType
+  name        String
+  phone       String?
+  email       String?
+  address     String?
+  notes       String?
+  isPrimary   Boolean     @default(false) // For emergency contacts, mark primary
+  
+  createdById String
+  createdBy   User        @relation("CreatedContacts", fields: [createdById], references: [id])
+  
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  @@index([teamId])
+  @@index([type])
+  @@index([createdById])
+}
+
+model Notification {
+  id        String           @id @default(cuid())
+  teamId    String
+  team      CareTeam         @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  
+  userId    String           // User who should see this notification
+  user      User             @relation("Notifications", fields: [userId], references: [id], onDelete: Cascade)
+  
+  type      NotificationType
+  title     String
+  message   String
+  isRead    Boolean          @default(false)
+  readAt    DateTime?
+  
+  // Optional link to related resource
+  linkUrl   String?
+  linkLabel String?
+  
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+
+  @@index([teamId])
+  @@index([userId])
+  @@index([isRead])
+  @@index([createdAt])
 }

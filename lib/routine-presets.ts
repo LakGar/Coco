@@ -55,6 +55,17 @@ export const ROUTINE_PRESETS: Record<string, PresetItem[]> = {
     { id: "teeth", label: "Brushed teeth", category: "Daily Care" },
     { id: "dressed", label: "Got dressed", category: "Daily Care" },
   ],
+  
+  "Activities of Daily Living (ADL)": [
+    { id: "adl-bathing", label: "Bathing or showering independently", category: "Activities of Daily Living (ADL)" },
+    { id: "adl-dressing", label: "Dressing independently", category: "Activities of Daily Living (ADL)" },
+    { id: "adl-eating", label: "Eating independently", category: "Activities of Daily Living (ADL)" },
+    { id: "adl-toileting", label: "Toileting independently", category: "Activities of Daily Living (ADL)" },
+    { id: "adl-transferring", label: "Transferring (moving from bed to chair)", category: "Activities of Daily Living (ADL)" },
+    { id: "adl-continence", label: "Maintained continence", category: "Activities of Daily Living (ADL)" },
+    { id: "adl-walking", label: "Walking or mobility", category: "Activities of Daily Living (ADL)" },
+    { id: "adl-grooming", label: "Grooming and personal hygiene", category: "Activities of Daily Living (ADL)" },
+  ],
 }
 
 export const PRESET_CATEGORIES = Object.keys(ROUTINE_PRESETS)

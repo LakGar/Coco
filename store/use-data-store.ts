@@ -28,6 +28,7 @@ export interface Task {
   patientName?: string | null
   priority: "LOW" | "MEDIUM" | "HIGH" | "URGENT"
   status: "TODO" | "DONE" | "CANCELLED" | "DUE"
+  type?: "MEDICATION" | "APPOINTMENTS" | "SOCIAL" | "HEALTH_PERSONAL" | null
   dueDate?: string | null
   createdAt: string
   updatedAt: string

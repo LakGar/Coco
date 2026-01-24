@@ -34,6 +34,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { Plus, Search, Filter, Calendar, User, CheckCircle2, XCircle, Clock, AlertCircle, X, Trash2, MoreVertical, LayoutGrid, List, GanttChart, ChevronDown, ChevronUp } from "lucide-react"
+import { taskTypes, getTaskTypeIcon, getTaskTypeColor, type TaskType } from "@/lib/task-types"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { toast } from "sonner"
 
@@ -59,6 +60,7 @@ export default function TasksPage() {
   const [searchQuery, setSearchQuery] = React.useState("")
   const [statusFilter, setStatusFilter] = React.useState<string>("all")
   const [priorityFilter, setPriorityFilter] = React.useState<string>("all")
+  const [typeFilter, setTypeFilter] = React.useState<string>("all") // all, MEDICATION, APPOINTMENTS, SOCIAL, HEALTH_PERSONAL
   const [dueDateFilter, setDueDateFilter] = React.useState<string>("all") // all, overdue, today, thisWeek, upcoming
   const [filterModalOpen, setFilterModalOpen] = React.useState(false)
   
@@ -147,14 +149,20 @@ export default function TasksPage() {
   // Filter tasks
   const filteredTasks = React.useMemo(() => {
     return tasks.filter((task) => {
+      const searchLower = searchQuery.toLowerCase()
+      const taskTypeLabel = task.type ? taskTypes.find(t => t.value === task.type)?.label.toLowerCase() : ""
+      
       const matchesSearch =
         !searchQuery ||
-        task.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        task.description?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        task.patientName?.toLowerCase().includes(searchQuery.toLowerCase())
+        task.name.toLowerCase().includes(searchLower) ||
+        task.description?.toLowerCase().includes(searchLower) ||
+        task.patientName?.toLowerCase().includes(searchLower) ||
+        (taskTypeLabel && taskTypeLabel.includes(searchLower)) ||
+        (task.type && task.type.toLowerCase().includes(searchLower))
 
       const matchesStatus = statusFilter === "all" || task.status === statusFilter
       const matchesPriority = priorityFilter === "all" || task.priority === priorityFilter
+      const matchesType = typeFilter === "all" || task.type === typeFilter || (typeFilter === "none" && !task.type)
 
       // Due date filtering
       let matchesDueDate = true
@@ -183,9 +191,9 @@ export default function TasksPage() {
         matchesDueDate = false
       }
 
-      return matchesSearch && matchesStatus && matchesPriority && matchesDueDate
+      return matchesSearch && matchesStatus && matchesPriority && matchesType && matchesDueDate
     })
-  }, [tasks, searchQuery, statusFilter, priorityFilter, dueDateFilter])
+  }, [tasks, searchQuery, statusFilter, priorityFilter, typeFilter, dueDateFilter])
 
   const handleCreateTask = () => {
     setEditingTask(null)
@@ -598,7 +606,7 @@ export default function TasksPage() {
               <h1 className="text-2xl md:text-3xl font-bold truncate">Tasks</h1>
               <p className="text-sm md:text-md text-muted-foreground truncate">
             {filteredTasks.length} {filteredTasks.length === 1 ? "task" : "tasks"}
-            {searchQuery || statusFilter !== "all" || priorityFilter !== "all"
+            {searchQuery || statusFilter !== "all" || priorityFilter !== "all" || typeFilter !== "all" || dueDateFilter !== "all"
               ? ` (filtered from ${tasks.length})`
               : ""}
           </p>
@@ -675,7 +683,7 @@ export default function TasksPage() {
               
                 className="pl-10 pr-12 h-10 "
             />
-            {(statusFilter !== "all" || priorityFilter !== "all" || dueDateFilter !== "all") && (
+            {(statusFilter !== "all" || priorityFilter !== "all" || typeFilter !== "all" || dueDateFilter !== "all") && (
               <Button
                 variant="ghost"
                 size="icon"
@@ -683,6 +691,7 @@ export default function TasksPage() {
                 onClick={() => {
                   setStatusFilter("all")
                   setPriorityFilter("all")
+                  setTypeFilter("all")
                   setDueDateFilter("all")
                 }}
               >
@@ -698,9 +707,9 @@ export default function TasksPage() {
         >
               <Filter className="mr-2 h-5 w-5" />
               <span className="hidden sm:inline ">Filters</span>
-          {(statusFilter !== "all" || priorityFilter !== "all" || dueDateFilter !== "all") && (
+          {(statusFilter !== "all" || priorityFilter !== "all" || typeFilter !== "all" || dueDateFilter !== "all") && (
                 <span className="ml-2 h-5 w-5 rounded-full bg-primary text-primary-foreground text-xs flex items-center justify-center">
-              {[statusFilter, priorityFilter, dueDateFilter].filter((f) => f !== "all").length}
+              {[statusFilter, priorityFilter, typeFilter, dueDateFilter].filter((f) => f !== "all").length}
             </span>
           )}
         </Button>
@@ -805,6 +814,16 @@ export default function TasksPage() {
                       <CardContent className="p-4">
                         {/* Tags */}
                         <div className="flex items-center gap-2 mb-3 flex-wrap">
+                          {task.type && (() => {
+                            const TypeIcon = getTaskTypeIcon(task.type)
+                            const typeColor = getTaskTypeColor(task.type)
+                            return TypeIcon ? (
+                              <Badge variant="outline" className={`text-xs ${typeColor} border-current/20`}>
+                                <TypeIcon className="h-3 w-3 mr-1" />
+                                {taskTypes.find(t => t.value === task.type)?.label}
+                              </Badge>
+                            ) : null
+                          })()}
                           {task.patientName && (
                             <Badge variant="outline" className="text-xs">
                               <User className="h-3 w-3 mr-1" />
@@ -818,7 +837,16 @@ export default function TasksPage() {
                         </div>
 
                         {/* Task Name */}
-                        <h3 className="font-semibold text-sm mb-2 line-clamp-2">{task.name}</h3>
+                        <div className="flex items-center gap-2 mb-2">
+                          {task.type && (() => {
+                            const TypeIcon = getTaskTypeIcon(task.type)
+                            const typeColor = getTaskTypeColor(task.type)
+                            return TypeIcon ? (
+                              <TypeIcon className={`h-4 w-4 shrink-0 ${typeColor}`} />
+                            ) : null
+                          })()}
+                          <h3 className="font-semibold text-sm line-clamp-2">{task.name}</h3>
+                        </div>
 
                         {/* Description */}
                         {task.description && (
@@ -1000,7 +1028,14 @@ export default function TasksPage() {
                                           </div>
                                         </div>
                                       )}
-                                      <div className="flex-1 min-w-0">
+                                      <div className="flex-1 min-w-0 flex items-center gap-2">
+                                        {task.type && (() => {
+                                          const TypeIcon = getTaskTypeIcon(task.type)
+                                          const typeColor = getTaskTypeColor(task.type)
+                                          return TypeIcon ? (
+                                            <TypeIcon className={`h-4 w-4 shrink-0 ${typeColor}`} />
+                                          ) : null
+                                        })()}
                                         <div className={`font-normal text-md truncate ${
                                           effectiveStatus === "DONE" ? "line-through text-muted-foreground" : ""
                                         }`}>
@@ -1008,7 +1043,14 @@ export default function TasksPage() {
                                         </div>
                                       </div>
                                     </div>
-                                    <div className="shrink-0">
+                                    <div className="shrink-0 flex items-center gap-2">
+                                      {task.type && (() => {
+                                        const TypeIcon = getTaskTypeIcon(task.type)
+                                        const typeColor = getTaskTypeColor(task.type)
+                                        return TypeIcon ? (
+                                          <TypeIcon className={`h-4 w-4 ${typeColor}`} />
+                                        ) : null
+                                      })()}
                                       <Badge 
                                         variant="outline" 
                                         className={`text-[11px] px-1.5 py-1.5 h-6 shrink-0 leading-none ${getPriorityColor(task.priority)}`}
@@ -1071,6 +1113,16 @@ export default function TasksPage() {
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 mb-2 flex-wrap">
+                          {task.type && (() => {
+                            const TypeIcon = getTaskTypeIcon(task.type)
+                            const typeColor = getTaskTypeColor(task.type)
+                            return TypeIcon ? (
+                              <Badge variant="outline" className={`text-xs ${typeColor} border-current/20`}>
+                                <TypeIcon className="h-3 w-3 mr-1" />
+                                {taskTypes.find(t => t.value === task.type)?.label}
+                              </Badge>
+                            ) : null
+                          })()}
                           <Badge variant="outline" className="text-xs">
                             {task.status}
                           </Badge>
@@ -1085,12 +1137,43 @@ export default function TasksPage() {
                             {task.priority}
                           </Badge>
                         </div>
-                        <h3 className="font-semibold text-base mb-1">{task.name}</h3>
+                        <div className="flex items-center gap-2 mb-1">
+                          {task.type && (() => {
+                            const TypeIcon = getTaskTypeIcon(task.type)
+                            const typeColor = getTaskTypeColor(task.type)
+                            return TypeIcon ? (
+                              <TypeIcon className={`h-4 w-4 shrink-0 ${typeColor}`} />
+                            ) : null
+                          })()}
+                          <h3 className="font-semibold text-base">{task.name}</h3>
+                        </div>
                         {task.description && (
                           <p className="text-sm text-muted-foreground line-clamp-2 mb-2">
                             {task.description}
                           </p>
                         )}
+                        <div className="flex items-center gap-2 mb-2 flex-wrap">
+                          {task.type && (() => {
+                            const TypeIcon = getTaskTypeIcon(task.type)
+                            const typeColor = getTaskTypeColor(task.type)
+                            return TypeIcon ? (
+                              <Badge variant="outline" className={`text-xs ${typeColor} border-current/20`}>
+                                <TypeIcon className="h-3 w-3 mr-1" />
+                                {taskTypes.find(t => t.value === task.type)?.label}
+                              </Badge>
+                            ) : null
+                          })()}
+                          {task.patientName && (
+                            <Badge variant="outline" className="text-xs">
+                              <User className="h-3 w-3 mr-1" />
+                              {task.patientName}
+                            </Badge>
+                          )}
+                          <Badge variant="outline" className={`text-xs ${getPriorityColor(task.priority)}`}>
+                            <span className={`h-1.5 w-1.5 rounded-full mr-1.5 ${getPriorityDot(task.priority)}`} />
+                            {task.priority}
+                          </Badge>
+                        </div>
                         <div className="flex items-center gap-4 text-xs text-muted-foreground">
                           {task.assignedTo ? (
                             <div className="flex items-center gap-1">
@@ -1173,7 +1256,7 @@ export default function TasksPage() {
           <SheetHeader>
             <SheetTitle>Filter Tasks</SheetTitle>
             <SheetDescription>
-              Filter tasks by status, priority, and due date
+              Filter tasks by status, priority, type, and due date
             </SheetDescription>
           </SheetHeader>
 
@@ -1211,6 +1294,30 @@ export default function TasksPage() {
             </div>
 
             <div className="space-y-3">
+              <Label>Task Type</Label>
+              <Select value={typeFilter} onValueChange={setTypeFilter}>
+                <SelectTrigger>
+                  <SelectValue placeholder="All Types" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Types</SelectItem>
+                  <SelectItem value="none">No Type</SelectItem>
+                  {taskTypes.map((taskType) => {
+                    const Icon = taskType.icon
+                    return (
+                      <SelectItem key={taskType.value} value={taskType.value || ""}>
+                        <div className="flex items-center gap-2">
+                          <Icon className={`h-4 w-4 ${taskType.color}`} />
+                          <span>{taskType.label}</span>
+                        </div>
+                      </SelectItem>
+                    )
+                  })}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-3">
               <Label>Due Date</Label>
               <Select value={dueDateFilter} onValueChange={setDueDateFilter}>
                 <SelectTrigger>
@@ -1233,6 +1340,7 @@ export default function TasksPage() {
                 onClick={() => {
                   setStatusFilter("all")
                   setPriorityFilter("all")
+                  setTypeFilter("all")
                   setDueDateFilter("all")
                 }}
               >

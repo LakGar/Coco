@@ -9,6 +9,7 @@ export const nonEmptyStringSchema = z.string().min(1, "Cannot be empty").trim()
 // Task validation schemas
 export const taskPrioritySchema = z.enum(["LOW", "MEDIUM", "HIGH", "URGENT"])
 export const taskStatusSchema = z.enum(["TODO", "DONE", "CANCELLED", "DUE"])
+export const taskTypeSchema = z.enum(["MEDICATION", "APPOINTMENTS", "SOCIAL", "HEALTH_PERSONAL"]).nullable().optional()
 
 export const createTaskSchema = z.object({
   name: z.string().min(1, "Task name is required").max(200, "Task name must be less than 200 characters").trim(),
@@ -17,6 +18,7 @@ export const createTaskSchema = z.object({
   assignedToId: cuidSchema.nullable().optional(),
   priority: taskPrioritySchema,
   status: taskStatusSchema,
+  type: taskTypeSchema,
   dueDate: z.union([z.string().datetime(), z.string().date(), z.null()]).optional().nullable(),
 })
 
@@ -27,6 +29,7 @@ export const updateTaskSchema = z.object({
   assignedToId: cuidSchema.nullable().optional(),
   priority: taskPrioritySchema.optional(),
   status: taskStatusSchema.optional(),
+  type: taskTypeSchema,
   dueDate: z.union([z.string().datetime(), z.string().date(), z.null()]).optional().nullable(),
 })
 
@@ -78,6 +81,29 @@ log.debug({
   schemaType: typeof createRoutineInstanceSchema,
   hasParse: typeof createRoutineInstanceSchema?.parse === 'function',
 }, 'createRoutineInstanceSchema created')
+
+// Contact validation schemas
+export const contactTypeSchema = z.enum(["EMERGENCY_CONTACT", "EMERGENCY_SERVICES", "SUPPORT_GROUP", "PHYSICIAN", "PHARMACY", "INSURANCE", "OTHER"])
+
+export const createContactSchema = z.object({
+  type: contactTypeSchema,
+  name: z.string().min(1, "Name is required").max(200, "Name must be less than 200 characters").trim(),
+  phone: z.string().max(50, "Phone must be less than 50 characters").trim().nullable().optional(),
+  email: z.string().email("Invalid email address").max(200, "Email must be less than 200 characters").trim().nullable().optional(),
+  address: z.string().max(500, "Address must be less than 500 characters").trim().nullable().optional(),
+  notes: z.string().max(2000, "Notes must be less than 2000 characters").trim().nullable().optional(),
+  isPrimary: z.boolean().optional().default(false),
+})
+
+export const updateContactSchema = z.object({
+  type: contactTypeSchema.optional(),
+  name: z.string().min(1, "Name is required").max(200, "Name must be less than 200 characters").trim().optional(),
+  phone: z.string().max(50, "Phone must be less than 50 characters").trim().nullable().optional(),
+  email: z.string().email("Invalid email address").max(200, "Email must be less than 200 characters").trim().nullable().optional(),
+  address: z.string().max(500, "Address must be less than 500 characters").trim().nullable().optional(),
+  notes: z.string().max(2000, "Notes must be less than 2000 characters").trim().nullable().optional(),
+  isPrimary: z.boolean().optional(),
+})
 
 export const updateRoutineInstanceSchema = z.object({
   answers: z

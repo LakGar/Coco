@@ -2,6 +2,7 @@ import { requireAuth, isAuthError } from '@/lib/auth-middleware'
 import { prisma } from '@/lib/prisma'
 import { NextResponse } from 'next/server'
 import { createNotFoundErrorResponse, createInternalErrorResponse } from '@/lib/error-handler'
+import { checkAndCreateContactSetupNotification } from '@/lib/contact-notifications'
 
 export async function GET() {
   try {
@@ -66,6 +67,13 @@ export async function GET() {
         : null,
       memberCount: membership.team.members.length,
     }))
+
+    // Check and create contact setup notifications for all teams (async, don't wait)
+    teams.forEach((team) => {
+      checkAndCreateContactSetupNotification(team.id, user.id).catch(() => {
+        // Silently fail - notification creation is not critical
+      })
+    })
 
     return NextResponse.json({
       teams,

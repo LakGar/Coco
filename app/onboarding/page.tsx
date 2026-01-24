@@ -22,6 +22,8 @@ import { Plus, X, ChevronRight, ChevronLeft, Check, Brain } from 'lucide-react'
 import Image from 'next/image'
 import { toast } from 'sonner'
 import { Spinner } from '@/components/ui/spinner'
+import { ROUTINE_PRESETS, type PresetItem } from '@/lib/routine-presets'
+import { Checkbox } from '@/components/ui/checkbox'
 
 type UserRole = 'CAREGIVER' | 'FAMILY' | 'PHYSICIAN' | 'PATIENT'
 type TeamRole = 'CAREGIVER' | 'FAMILY' | 'PHYSICIAN'
@@ -49,6 +51,7 @@ export default function OnboardingPage() {
     patientName: '',
     patientEmail: '',
     teamMembers: [] as TeamMember[],
+    journalQuestions: [] as string[], // ADL and other journal questions
   })
 
   const [errors, setErrors] = useState<Record<string, string>>({})
@@ -97,6 +100,11 @@ export default function OnboardingPage() {
       }
     }
 
+    // Step 5 validation (journal setup) - optional but recommended
+    if (stepNumber === 5) {
+      // Journal questions are optional, but we can show a warning if none selected
+    }
+
     setErrors(newErrors)
     return Object.keys(newErrors).length === 0
   }
@@ -142,7 +150,7 @@ export default function OnboardingPage() {
 
   const handleSubmit = async () => {
     // Validate based on whether user is creating a team or just updating profile
-    const stepToValidate = isExistingTeamMember ? 3 : 4
+    const stepToValidate = isExistingTeamMember ? 3 : 5
     if (!validateStep(stepToValidate)) return
 
     toast.promise(
@@ -161,6 +169,7 @@ export default function OnboardingPage() {
           patientName: isExistingTeamMember ? undefined : formData.patientName,
           patientEmail: isExistingTeamMember ? undefined : formData.patientEmail,
           teamMembers: isExistingTeamMember ? [] : formData.teamMembers,
+          journalQuestions: formData.journalQuestions, // Include journal questions
         }),
       }).then(async (response) => {
         if (!response.ok) {
@@ -185,11 +194,23 @@ export default function OnboardingPage() {
     )
   }
 
+  const toggleJournalQuestion = (question: string) => {
+    setFormData((prev) => ({
+      ...prev,
+      journalQuestions: prev.journalQuestions.includes(question)
+        ? prev.journalQuestions.filter((q) => q !== question)
+        : [...prev.journalQuestions, question],
+    }))
+  }
+
   const steps = [
     { number: 1, title: 'Personal Information', description: 'Tell us about yourself' },
     { number: 2, title: 'Your Role', description: 'What role do you play?' },
     { number: 3, title: 'Location', description: 'Where are you located?' },
-    ...(isExistingTeamMember ? [] : [{ number: 4, title: 'Create Team', description: 'Set up your care team' }]),
+    ...(isExistingTeamMember ? [] : [
+      { number: 4, title: 'Create Team', description: 'Set up your care team' },
+      { number: 5, title: 'Daily Journal', description: 'Set up your daily journal questions' },
+    ]),
   ]
 
   const progress = (step / steps.length) * 100
@@ -612,6 +633,88 @@ export default function OnboardingPage() {
             </div>
           )}
 
+          {/* Step 5: Daily Journal Setup */}
+          {step === 5 && !isExistingTeamMember && (
+            <div className="space-y-8 animate-in fade-in slide-in-from-right-4 duration-300">
+              <div>
+                <h2 className="text-2xl font-semibold mb-2">Set Up Your Daily Journal</h2>
+                <p className="text-muted-foreground">
+                  Select questions to track daily. You can add more later.
+                </p>
+              </div>
+
+              <div className="space-y-6">
+                {/* Activities of Daily Living Section */}
+                <div className="space-y-4">
+                  <div className="flex items-center gap-2">
+                    <Brain className="h-5 w-5 text-primary" />
+                    <h3 className="text-lg font-semibold">Activities of Daily Living (ADL)</h3>
+                  </div>
+                  <p className="text-sm text-muted-foreground">
+                    Track essential daily activities for care planning
+                  </p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {ROUTINE_PRESETS["Activities of Daily Living (ADL)"].map((item) => (
+                      <div
+                        key={item.id}
+                        className="flex items-center space-x-2 p-3 rounded-lg border hover:bg-muted/50 transition-colors cursor-pointer"
+                        onClick={() => toggleJournalQuestion(item.label)}
+                      >
+                        <Checkbox
+                          checked={formData.journalQuestions.includes(item.label)}
+                          onCheckedChange={() => toggleJournalQuestion(item.label)}
+                        />
+                        <label className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer flex-1">
+                          {item.label}
+                        </label>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Other Categories - Collapsed by default */}
+                <div className="space-y-4 pt-4 border-t">
+                  <h3 className="text-lg font-semibold">Additional Questions (Optional)</h3>
+                  {Object.entries(ROUTINE_PRESETS)
+                    .filter(([category]) => category !== "Activities of Daily Living (ADL)")
+                    .map(([category, items]) => (
+                      <div key={category} className="space-y-3">
+                        <h4 className="text-sm font-medium text-muted-foreground">{category}</h4>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          {items.slice(0, 4).map((item) => (
+                            <div
+                              key={item.id}
+                              className="flex items-center space-x-2 p-3 rounded-lg border hover:bg-muted/50 transition-colors cursor-pointer"
+                              onClick={() => toggleJournalQuestion(item.label)}
+                            >
+                              <Checkbox
+                                checked={formData.journalQuestions.includes(item.label)}
+                                onCheckedChange={() => toggleJournalQuestion(item.label)}
+                              />
+                              <label className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer flex-1">
+                                {item.label}
+                              </label>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                </div>
+
+                {formData.journalQuestions.length > 0 && (
+                  <div className="p-4 rounded-lg bg-primary/5 border border-primary/20">
+                    <p className="text-sm font-medium text-primary mb-1">
+                      {formData.journalQuestions.length} question{formData.journalQuestions.length !== 1 ? 's' : ''} selected
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      These will be included in your daily journal routine
+                    </p>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
           {/* Navigation Buttons */}
           <div className="flex justify-between items-center mt-12 pt-8 border-t">
             <Button
@@ -624,7 +727,7 @@ export default function OnboardingPage() {
               <ChevronLeft className="h-4 w-4" />
               Back
             </Button>
-            {step < (isExistingTeamMember ? 3 : 4) ? (
+            {step < (isExistingTeamMember ? 3 : 5) ? (
               <Button type="button" onClick={handleNext} className="gap-2" size="lg">
                 Next
                 <ChevronRight className="h-4 w-4" />

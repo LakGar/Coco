@@ -15,6 +15,7 @@ import { NotesPreview } from "@/components/notes-preview"
 import { CarePlanPreview } from "@/components/care-plan-preview"
 import { RoutinesPreview } from "@/components/routines-preview"
 import { UpcomingTasksPreview } from "@/components/upcoming-tasks-preview"
+import { ContactsPreview } from "@/components/contacts-preview"
 import { TaskForm } from "@/components/task-form"
 import { NightlyJournalModal } from "@/components/nightly-journal-modal"
 import { format, isToday, isPast, startOfDay } from "date-fns"
@@ -74,6 +75,28 @@ export default function DashboardPage() {
   const [journalModalOpen, setJournalModalOpen] = React.useState(false)
   const [selectedRoutine, setSelectedRoutine] = React.useState<Routine | null>(null)
   const [lastJournalEntry, setLastJournalEntry] = React.useState<any>(null)
+  const [contacts, setContacts] = React.useState<any[]>([])
+
+  // Fetch contacts
+  React.useEffect(() => {
+    if (!activeTeam) return
+
+    const fetchContacts = async () => {
+      try {
+        const response = await fetch(`/api/teams/${activeTeam.id}/contacts`)
+        if (response.ok) {
+          const data = await response.json()
+          setContacts(data.contacts || [])
+        }
+      } catch (error) {
+        if (process.env.NODE_ENV === 'development') {
+          console.error('Error fetching contacts:', error)
+        }
+      }
+    }
+
+    fetchContacts()
+  }, [activeTeam])
 
   // Fetch all data on mount and when team changes
   React.useEffect(() => {
@@ -563,6 +586,12 @@ export default function DashboardPage() {
 
             {/* Notes Preview */}
             <NotesPreview />
+
+            {/* Contacts Preview */}
+            <ContactsPreview
+              contacts={contacts}
+              onViewContacts={() => router.push("/dashboard/contacts")}
+            />
 
             {/* Care Plan Preview */}
             <CarePlanPreview />

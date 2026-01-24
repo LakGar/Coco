@@ -1,21 +1,19 @@
 import { prisma } from '@/lib/prisma'
 import { NextResponse } from 'next/server'
-import { TaskPriority, TaskStatus, TaskType } from '@prisma/client'
-import { updateTaskSchema, validateRequest, formatZodError } from '@/lib/validations'
+import { ContactType } from '@prisma/client'
+import { updateContactSchema, validateRequest } from '@/lib/validations'
 import { rateLimit, addRateLimitHeaders } from '@/lib/rate-limit'
-import { requireTeamAccess, isAuthError } from '@/lib/auth-middleware'
+import { requireTeamAccess, extractTeamId, isAuthError } from '@/lib/auth-middleware'
 import { createValidationErrorResponse, createNotFoundErrorResponse, createInternalErrorResponse } from '@/lib/error-handler'
 
 export async function PATCH(
   req: Request,
-  { params }: { params: { teamId: string; taskId: string } | Promise<{ teamId: string; taskId: string }> }
+  { params }: { params: { teamId: string; contactId: string } | Promise<{ teamId: string; contactId: string }> }
 ) {
   try {
-    // Extract params and check authorization (requires FULL access for write operations)
     const resolvedParams = params instanceof Promise ? await params : params
-    const { teamId, taskId } = resolvedParams
-
-    const authResult = await requireTeamAccess(teamId, 'FULL')
+    const { teamId, contactId } = resolvedParams
+    const authResult = await requireTeamAccess(teamId, "FULL")
 
     if (isAuthError(authResult)) {
       return authResult.response
@@ -37,58 +35,64 @@ export async function PATCH(
       return response
     }
 
-    // Find the task
-    const task = await prisma.task.findFirst({
+    // Find the contact
+    const contact = await prisma.contact.findFirst({
       where: {
-        id: taskId,
+        id: contactId,
         teamId: teamId,
       },
     })
 
-    if (!task) {
-      return createNotFoundErrorResponse('Task', {
-        endpoint: '/api/teams/[teamId]/tasks/[taskId]',
-        method: 'PATCH',
+    if (!contact) {
+      return createNotFoundErrorResponse("Contact", {
+        endpoint: "/api/teams/[teamId]/contacts/[contactId]",
+        method: "PATCH",
         teamId,
-        taskId,
+        contactId,
         userId: user.id,
       })
     }
 
     // Validate request body
-    const validation = await validateRequest(req, updateTaskSchema)
+    const validation = await validateRequest(req, updateContactSchema)
     if (validation.error) {
       return createValidationErrorResponse(validation.error, {
-        endpoint: '/api/teams/[teamId]/tasks/[taskId]',
-        method: 'PATCH',
+        endpoint: "/api/teams/[teamId]/contacts/[contactId]",
+        method: "PATCH",
         teamId,
-        taskId,
+        contactId,
         userId: user.id,
       })
     }
-    const {
-      name,
-      description,
-      patientName,
-      assignedToId,
-      priority,
-      status,
-      type,
-      dueDate,
-    } = validation.data
 
-    // Update task
-    const updatedTask = await prisma.task.update({
-      where: { id: taskId },
+    const { type, name, phone, email, address, notes, isPrimary } = validation.data
+
+    // If setting as primary, unset other primary contacts of the same type
+    if (isPrimary && (type !== undefined ? type : contact.type)) {
+      await prisma.contact.updateMany({
+        where: {
+          teamId: teamId,
+          type: (type as ContactType) || contact.type,
+          isPrimary: true,
+          id: { not: contactId },
+        },
+        data: {
+          isPrimary: false,
+        },
+      })
+    }
+
+    // Update contact
+    const updatedContact = await prisma.contact.update({
+      where: { id: contactId },
       data: {
+        ...(type !== undefined && { type: type as ContactType }),
         ...(name !== undefined && { name: name.trim() }),
-        ...(description !== undefined && { description: description?.trim() || null }),
-        ...(patientName !== undefined && { patientName: patientName || null }),
-        ...(assignedToId !== undefined && { assignedToId: assignedToId || null }),
-        ...(priority && { priority: priority as TaskPriority }),
-        ...(status && { status: status as TaskStatus }),
-        ...(type !== undefined && { type: type ? (type as TaskType) : null }),
-        ...(dueDate !== undefined && { dueDate: dueDate ? new Date(dueDate) : null }),
+        ...(phone !== undefined && { phone: phone?.trim() || null }),
+        ...(email !== undefined && { email: email?.trim() || null }),
+        ...(address !== undefined && { address: address?.trim() || null }),
+        ...(notes !== undefined && { notes: notes?.trim() || null }),
+        ...(isPrimary !== undefined && { isPrimary }),
       },
       include: {
         createdBy: {
@@ -101,43 +105,31 @@ export async function PATCH(
             imageUrl: true,
           },
         },
-        assignedTo: {
-          select: {
-            id: true,
-            name: true,
-            firstName: true,
-            lastName: true,
-            email: true,
-            imageUrl: true,
-          },
-        },
       },
     })
 
-    const response = NextResponse.json({ task: updatedTask })
+    const response = NextResponse.json({ contact: updatedContact })
     addRateLimitHeaders(response.headers, rateLimitResult.limit, rateLimitResult.remaining, rateLimitResult.reset)
     return response
   } catch (error) {
     const resolvedParams = params instanceof Promise ? await params : params
     return createInternalErrorResponse(error, {
-      endpoint: '/api/teams/[teamId]/tasks/[taskId]',
-      method: 'PATCH',
+      endpoint: "/api/teams/[teamId]/contacts/[contactId]",
+      method: "PATCH",
       teamId: resolvedParams.teamId,
-      taskId: resolvedParams.taskId,
+      contactId: resolvedParams.contactId,
     })
   }
 }
 
 export async function DELETE(
   req: Request,
-  { params }: { params: { teamId: string; taskId: string } | Promise<{ teamId: string; taskId: string }> }
+  { params }: { params: { teamId: string; contactId: string } | Promise<{ teamId: string; contactId: string }> }
 ) {
   try {
-    // Extract params and check authorization (requires FULL access for delete operations)
     const resolvedParams = params instanceof Promise ? await params : params
-    const { teamId, taskId } = resolvedParams
-
-    const authResult = await requireTeamAccess(teamId, 'FULL')
+    const { teamId, contactId } = resolvedParams
+    const authResult = await requireTeamAccess(teamId, "FULL")
 
     if (isAuthError(authResult)) {
       return authResult.response
@@ -145,11 +137,11 @@ export async function DELETE(
 
     const { user } = authResult
 
-    // Rate limiting (sensitive operation)
+    // Rate limiting
     const rateLimitResult = await rateLimit(req, "DELETE", user.clerkId || user.id)
     if (!rateLimitResult.success) {
       const response = NextResponse.json(
-        { 
+        {
           error: 'Too many requests',
           message: 'Rate limit exceeded. Please try again later.',
         },
@@ -159,38 +151,37 @@ export async function DELETE(
       return response
     }
 
-    // Find the task
-    const task = await prisma.task.findFirst({
+    // Find the contact
+    const contact = await prisma.contact.findFirst({
       where: {
-        id: taskId,
+        id: contactId,
         teamId: teamId,
       },
     })
 
-    if (!task) {
-      return createNotFoundErrorResponse('Task', {
-        endpoint: '/api/teams/[teamId]/tasks/[taskId]',
-        method: 'DELETE',
+    if (!contact) {
+      return createNotFoundErrorResponse("Contact", {
+        endpoint: "/api/teams/[teamId]/contacts/[contactId]",
+        method: "DELETE",
         teamId,
-        taskId,
+        contactId,
         userId: user.id,
       })
     }
 
-    // Delete task
-    await prisma.task.delete({
-      where: { id: taskId },
+    // Delete contact
+    await prisma.contact.delete({
+      where: { id: contactId },
     })
 
     return NextResponse.json({ success: true })
   } catch (error) {
     const resolvedParams = params instanceof Promise ? await params : params
     return createInternalErrorResponse(error, {
-      endpoint: '/api/teams/[teamId]/tasks/[taskId]',
-      method: 'DELETE',
+      endpoint: "/api/teams/[teamId]/contacts/[contactId]",
+      method: "DELETE",
       teamId: resolvedParams.teamId,
-      taskId: resolvedParams.taskId,
+      contactId: resolvedParams.contactId,
     })
   }
 }
-
