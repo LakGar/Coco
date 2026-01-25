@@ -1,137 +1,153 @@
-'use client'
+"use client";
 
-import { useEffect, useState } from 'react'
-import { useTeamStore } from '@/store/use-team-store'
-import { Spinner } from '@/components/ui/spinner'
-import { Card } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
-import { TeamMemberCard } from '@/components/ui/team-member-card'
-import { Users } from 'lucide-react'
-import { toast } from 'sonner'
+import { useEffect, useState } from "react";
+import { useTeamStore } from "@/store/use-team-store";
+import { Spinner } from "@/components/ui/spinner";
+import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { TeamMemberCard } from "@/components/ui/team-member-card";
+import { AddTeamMemberModal } from "@/components/add-team-member-modal";
+import { Users } from "lucide-react";
+import { toast } from "sonner";
 
 interface TeamMember {
-  id: string
-  name: string
-  email: string
-  image?: string
-  role: string
-  isAdmin: boolean
-  accessLevel: string
-  joinedAt: string
-  isTeamCreator?: boolean
+  id: string;
+  name: string;
+  email: string;
+  image?: string;
+  role: string;
+  isAdmin: boolean;
+  accessLevel: string;
+  joinedAt: string;
+  isTeamCreator?: boolean;
 }
 
 interface TeamData {
   team: {
-    id: string
-    name: string
-    patientId?: string | null
-  }
-  members: TeamMember[]
-  patient: TeamMember | null
+    id: string;
+    name: string;
+    patientId?: string | null;
+  };
+  members: TeamMember[];
+  patient: TeamMember | null;
   currentUser: {
-    id: string
-    isAdmin: boolean
-    accessLevel: string
-  }
+    id: string;
+    isAdmin: boolean;
+    accessLevel: string;
+  };
 }
 
 export default function TeamPage() {
-  const { activeTeam } = useTeamStore()
-  const [teamData, setTeamData] = useState<TeamData | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  const { activeTeam } = useTeamStore();
+  const [teamData, setTeamData] = useState<TeamData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [addMemberModalOpen, setAddMemberModalOpen] = useState(false);
 
   useEffect(() => {
     const fetchTeamMembers = async () => {
       if (!activeTeam) {
-        setError('No active team selected')
-        setLoading(false)
-        return
+        setError("No active team selected");
+        setLoading(false);
+        return;
       }
 
       try {
-        const response = await fetch(`/api/teams/${activeTeam.id}/members`)
+        const response = await fetch(`/api/teams/${activeTeam.id}/members`);
         if (!response.ok) {
-          throw new Error('Failed to load team members')
+          throw new Error("Failed to load team members");
         }
-        const data = await response.json()
-        setTeamData(data)
+        const data = await response.json();
+        setTeamData(data);
       } catch (error) {
-        console.error('Error fetching team members:', error)
-        setError('Failed to load team members')
+        console.error("Error fetching team members:", error);
+        setError("Failed to load team members");
       } finally {
-        setLoading(false)
+        setLoading(false);
       }
-    }
+    };
 
-    fetchTeamMembers()
-  }, [activeTeam])
+    fetchTeamMembers();
+  }, [activeTeam]);
 
   const handleMessage = (member: TeamMember) => {
     // TODO: Implement messaging functionality
-    console.log('Message:', member)
-  }
+    console.log("Message:", member);
+  };
 
-  const handlePermissions = async ({ member, action }: { member: TeamMember; action: string }) => {
+  const handlePermissions = async ({
+    member,
+    action,
+  }: {
+    member: TeamMember;
+    action: string;
+  }) => {
     if (!activeTeam) {
-      toast.error('No active team selected')
-      return
+      toast.error("No active team selected");
+      return;
     }
 
     // Determine what to update based on action
-    let accessLevel: 'FULL' | 'READ_ONLY' | undefined
-    let isAdmin: boolean | undefined
+    let accessLevel: "FULL" | "READ_ONLY" | undefined;
+    let isAdmin: boolean | undefined;
 
-    if (action.includes('Full Access')) {
-      accessLevel = 'FULL'
-    } else if (action.includes('Read Only')) {
-      accessLevel = 'READ_ONLY'
-    } else if (action.includes('Remove Admin') || action.includes('Removing')) {
-      isAdmin = false
-    } else if (action.includes('Admin') || action.includes('Making')) {
-      isAdmin = true
+    if (action.includes("Full Access")) {
+      accessLevel = "FULL";
+    } else if (action.includes("Read Only")) {
+      accessLevel = "READ_ONLY";
+    } else if (action.includes("Remove Admin") || action.includes("Removing")) {
+      isAdmin = false;
+    } else if (action.includes("Admin") || action.includes("Making")) {
+      isAdmin = true;
     }
 
     try {
-      const requestBody: { accessLevel?: 'FULL' | 'READ_ONLY'; isAdmin?: boolean } = {}
-      
+      const requestBody: {
+        accessLevel?: "FULL" | "READ_ONLY";
+        isAdmin?: boolean;
+      } = {};
+
       if (accessLevel) {
-        requestBody.accessLevel = accessLevel
-      }
-      
-      if (typeof isAdmin === 'boolean') {
-        requestBody.isAdmin = isAdmin
+        requestBody.accessLevel = accessLevel;
       }
 
-      const response = await fetch(`/api/teams/${activeTeam.id}/members/${member.id}`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
+      if (typeof isAdmin === "boolean") {
+        requestBody.isAdmin = isAdmin;
+      }
+
+      const response = await fetch(
+        `/api/teams/${activeTeam.id}/members/${member.id}`,
+        {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(requestBody),
         },
-        body: JSON.stringify(requestBody),
-      })
+      );
 
       if (!response.ok) {
-        const error = await response.json()
-        throw new Error(error.error || 'Failed to update permissions')
+        const error = await response.json();
+        throw new Error(error.error || "Failed to update permissions");
       }
 
-      const data = await response.json()
-      
+      const data = await response.json();
+
       // Refresh team data
-      const teamResponse = await fetch(`/api/teams/${activeTeam.id}/members`)
+      const teamResponse = await fetch(`/api/teams/${activeTeam.id}/members`);
       if (teamResponse.ok) {
-        const teamData = await teamResponse.json()
-        setTeamData(teamData)
+        const teamData = await teamResponse.json();
+        setTeamData(teamData);
       }
 
-      toast.success(`Permissions updated for ${member.name}`)
+      toast.success(`Permissions updated for ${member.name}`);
     } catch (error) {
-      console.error('Error updating permissions:', error)
-      toast.error(error instanceof Error ? error.message : 'Failed to update permissions')
+      console.error("Error updating permissions:", error);
+      toast.error(
+        error instanceof Error ? error.message : "Failed to update permissions",
+      );
     }
-  }
+  };
 
   if (loading) {
     return (
@@ -141,7 +157,7 @@ export default function TeamPage() {
           <p className="text-muted-foreground">Loading team members...</p>
         </div>
       </div>
-    )
+    );
   }
 
   if (error) {
@@ -155,17 +171,30 @@ export default function TeamPage() {
           <p className="text-muted-foreground">{error}</p>
         </Card>
       </div>
-    )
+    );
   }
 
   if (!teamData) {
-    return null
+    return null;
   }
 
   // Only show team members (not patient)
-  const teamMembers = teamData.members
-  const canAddMembers = teamData.currentUser.isAdmin || teamData.currentUser.accessLevel === 'FULL'
-  const canManagePermissions = teamData.currentUser.isAdmin
+  const teamMembers = teamData.members;
+  const canAddMembers =
+    teamData.currentUser.isAdmin || teamData.currentUser.accessLevel === "FULL";
+  const canManagePermissions = teamData.currentUser.isAdmin;
+
+  const handleMemberAdded = () => {
+    // Refresh team data
+    if (activeTeam) {
+      fetch(`/api/teams/${activeTeam.id}/members`)
+        .then((res) => res.json())
+        .then((data) => setTeamData(data))
+        .catch((err) => {
+          console.error("Error refreshing team data:", err);
+        });
+    }
+  };
 
   return (
     <div className="space-y-6 p-6">
@@ -175,11 +204,13 @@ export default function TeamPage() {
           <div>
             <h1 className="text-3xl font-bold mb-2">{teamData.team.name}</h1>
             <p className="text-muted-foreground">
-              {teamMembers.length} {teamMembers.length === 1 ? 'member' : 'members'} in this care team
+              {teamMembers.length}{" "}
+              {teamMembers.length === 1 ? "member" : "members"} in this care
+              team
             </p>
           </div>
           {canAddMembers && (
-            <Button>
+            <Button onClick={() => setAddMemberModalOpen(true)}>
               <Users className="mr-2 h-4 w-4" />
               Add Team Member
             </Button>
@@ -211,13 +242,23 @@ export default function TeamPage() {
             Team members will appear here once they accept their invitations.
           </p>
           {canAddMembers && (
-            <Button>
+            <Button onClick={() => setAddMemberModalOpen(true)}>
               <Users className="mr-2 h-4 w-4" />
               Invite Team Member
             </Button>
           )}
         </Card>
       )}
+
+      {/* Add Member Modal */}
+      {activeTeam && (
+        <AddTeamMemberModal
+          open={addMemberModalOpen}
+          onOpenChange={setAddMemberModalOpen}
+          teamId={activeTeam.id}
+          onSuccess={handleMemberAdded}
+        />
+      )}
     </div>
-  )
+  );
 }

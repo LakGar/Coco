@@ -161,3 +161,111 @@ export async function PATCH(
   }
 }
 
+export async function DELETE(
+  req: Request,
+  { params }: { params: { teamId: string; memberId: string } | Promise<{ teamId: string; memberId: string }> }
+) {
+  try {
+    const resolvedParams = params instanceof Promise ? await params : params
+    const { teamId, memberId } = resolvedParams
+    const authResult = await requireTeamAccess(teamId, "FULL")
+
+    if (isAuthError(authResult)) {
+      return authResult.response
+    }
+
+    const { user, membership } = authResult
+
+    // Only admins can remove members
+    if (!membership.isAdmin) {
+      return NextResponse.json(
+        { error: 'Unauthorized', message: 'Only admins can remove team members.' },
+        { status: 403 }
+      )
+    }
+
+    // Rate limiting
+    const rateLimitResult = await rateLimit(req, "DELETE", user.clerkId || user.id)
+    if (!rateLimitResult.success) {
+      const response = NextResponse.json(
+        {
+          error: "Too many requests",
+          message: "Rate limit exceeded. Please try again later.",
+        },
+        { status: 429 }
+      )
+      addRateLimitHeaders(response.headers, rateLimitResult.limit, rateLimitResult.remaining, rateLimitResult.reset)
+      return response
+    }
+
+    // Find the member to remove
+    const memberToRemove = await prisma.careTeamMember.findFirst({
+      where: {
+        teamId: teamId,
+        userId: memberId,
+      },
+      include: {
+        user: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+      },
+    })
+
+    if (!memberToRemove) {
+      return createNotFoundErrorResponse("Member not found in this team", {
+        endpoint: "/api/teams/[teamId]/members/[memberId]",
+        method: "DELETE",
+        teamId,
+        memberId,
+      })
+    }
+
+    // Prevent removing yourself
+    if (memberToRemove.userId === user.id) {
+      return NextResponse.json(
+        { error: 'You cannot remove yourself from the team' },
+        { status: 400 }
+      )
+    }
+
+    // Find the team creator (first admin by joinedAt date)
+    const teamCreator = await prisma.careTeamMember.findFirst({
+      where: {
+        teamId: teamId,
+        isAdmin: true,
+      },
+      orderBy: {
+        joinedAt: 'asc',
+      },
+    })
+
+    // Prevent removing the team creator
+    if (memberToRemove.id === teamCreator?.id) {
+      return NextResponse.json(
+        { error: 'Cannot remove the team creator' },
+        { status: 400 }
+      )
+    }
+
+    // Remove the member
+    await prisma.careTeamMember.delete({
+      where: { id: memberToRemove.id },
+    })
+
+    const response = NextResponse.json({ success: true })
+    addRateLimitHeaders(response.headers, rateLimitResult.limit, rateLimitResult.remaining, rateLimitResult.reset)
+    return response
+  } catch (error) {
+    const resolvedParams = params instanceof Promise ? await params : params
+    return createInternalErrorResponse(error, {
+      endpoint: "/api/teams/[teamId]/members/[memberId]",
+      method: "DELETE",
+      teamId: resolvedParams.teamId,
+      memberId: resolvedParams.memberId,
+    })
+  }
+}
+

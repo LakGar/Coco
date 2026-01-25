@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
-import { TaskPriority, TaskStatus, TaskType } from "@prisma/client";
+import { TaskPriority, TaskStatus } from "@prisma/client";
 import {
   createTaskSchema,
   validateRequest,
@@ -11,6 +11,8 @@ import {
   requireTeamAccess,
   extractTeamId,
   isAuthError,
+  hasPermission,
+  requirePermission,
 } from "@/lib/auth-middleware";
 import {
   createErrorResponse,
@@ -31,7 +33,15 @@ export async function GET(
       return authResult.response;
     }
 
-    const { user } = authResult;
+    const { user, membership } = authResult;
+
+    // Check if user has permission to view tasks
+    if (!membership.isAdmin && !membership.canViewTasks) {
+      return NextResponse.json(
+        { error: 'Forbidden', message: 'You do not have permission to view tasks' },
+        { status: 403 }
+      );
+    }
 
     // Rate limiting
     const rateLimitResult = await rateLimit(
@@ -56,10 +66,23 @@ export async function GET(
       return response;
     }
 
+    // Check if user has permission to view tasks
+    if (!authResult.membership.isAdmin && !authResult.membership.canViewTasks) {
+      return NextResponse.json(
+        { error: 'Forbidden', message: 'You do not have permission to view tasks' },
+        { status: 403 }
+      )
+    }
+
     // Get all tasks for this team
+    // Personal tasks are only visible to the user who created them
     const tasks = await prisma.task.findMany({
       where: {
         teamId: teamId,
+        OR: [
+          { isPersonal: false }, // All non-personal tasks
+          { isPersonal: true, createdById: user.id }, // Personal tasks only for current user
+        ],
       },
       include: {
         createdBy: {
@@ -117,7 +140,13 @@ export async function POST(
       return authResult.response;
     }
 
-    const { user } = authResult;
+    const { user, membership } = authResult;
+
+    // Check if user has permission to create tasks
+    const permissionError = requirePermission(membership, 'canCreateTasks', 'create tasks');
+    if (permissionError) {
+      return permissionError.response;
+    }
 
     // Rate limiting
     const rateLimitResult = await rateLimit(
@@ -160,6 +189,7 @@ export async function POST(
       priority,
       status,
       type,
+      isPersonal,
       dueDate,
     } = validation.data;
 
@@ -200,7 +230,8 @@ export async function POST(
         assignedToId: assignedToId || null,
         priority: (priority as TaskPriority) || "MEDIUM",
         status: (status as TaskStatus) || "TODO",
-        type: type ? (type as TaskType) : null,
+        ...(type !== undefined && { type: type as "MEDICATION" | "APPOINTMENTS" | "SOCIAL" | "HEALTH_PERSONAL" | null }),
+        isPersonal: isPersonal || false,
         dueDate: dueDate ? new Date(dueDate) : null,
       },
       include: {

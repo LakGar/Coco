@@ -1,8 +1,8 @@
-"use client"
+"use client";
 
-import * as React from "react"
-import { ChevronsUpDown, Plus, Users } from "lucide-react"
-import { useTeamStore, type Team } from "@/store/use-team-store"
+import * as React from "react";
+import { ChevronsUpDown, Plus, Users } from "lucide-react";
+import { useTeamStore, type Team } from "@/store/use-team-store";
 
 import {
   DropdownMenu,
@@ -12,17 +12,17 @@ import {
   DropdownMenuSeparator,
   DropdownMenuShortcut,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
+} from "@/components/ui/dropdown-menu";
 import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
   useSidebar,
-} from "@/components/ui/sidebar"
+} from "@/components/ui/sidebar";
 
 export function TeamSwitcher() {
-  const { isMobile } = useSidebar()
-  const { activeTeam, teams, setActiveTeam } = useTeamStore()
+  const { isMobile } = useSidebar();
+  const { activeTeam, teams, setActiveTeam } = useTeamStore();
 
   // Show loading state if no teams yet
   if (teams.length === 0) {
@@ -40,14 +40,14 @@ export function TeamSwitcher() {
           </SidebarMenuButton>
         </SidebarMenuItem>
       </SidebarMenu>
-    )
+    );
   }
 
   // If we have teams but no active team, use first team
-  const displayTeam = activeTeam || teams[0]
+  const displayTeam = activeTeam || teams[0];
 
   if (!displayTeam) {
-    return null
+    return null;
   }
 
   return (
@@ -63,9 +63,12 @@ export function TeamSwitcher() {
                 <Users className="size-4 text-[#3d1e07]" />
               </div>
               <div className="grid flex-1 text-left text-sm leading-tight">
-                <span className="truncate font-medium">{displayTeam.name}</span>
+                <span className="truncate font-medium">
+                  {displayTeam.name || displayTeam.patientName || "Team"}
+                </span>
                 <span className="truncate text-xs">
-                  {displayTeam.memberCount || 0} {displayTeam.memberCount === 1 ? 'member' : 'members'}
+                  {displayTeam.memberCount || 0}{" "}
+                  {displayTeam.memberCount === 1 ? "member" : "members"}
                 </span>
               </div>
               <ChevronsUpDown className="ml-auto" />
@@ -91,11 +94,6 @@ export function TeamSwitcher() {
                 </div>
                 <div className="flex-1">
                   <div className="font-medium">{team.name}</div>
-                  {team.patientName && (
-                    <div className="text-xs text-muted-foreground">
-                      {team.patientName}
-                    </div>
-                  )}
                 </div>
                 {displayTeam.id === team.id && (
                   <DropdownMenuShortcut>✓</DropdownMenuShortcut>
@@ -113,5 +111,5 @@ export function TeamSwitcher() {
         </DropdownMenu>
       </SidebarMenuItem>
     </SidebarMenu>
-  )
+  );
 }

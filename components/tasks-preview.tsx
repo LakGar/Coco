@@ -7,7 +7,11 @@ import { Button } from "@/components/ui/button";
 import { CheckCircle2, Clock, AlertCircle } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { format } from "date-fns";
-import { getTaskTypeIcon, getTaskTypeColor, type TaskType } from "@/lib/task-types";
+import {
+  getTaskTypeIcon,
+  getTaskTypeColor,
+  type TaskType,
+} from "@/lib/task-types";
 
 interface Task {
   id: string;
@@ -128,13 +132,14 @@ export function TasksPreview({
                 >
                   {getStatusIcon(task.status, task.dueDate)}
                 </button>
-                {task.type && (() => {
-                  const TypeIcon = getTaskTypeIcon(task.type);
-                  const typeColor = getTaskTypeColor(task.type);
-                  return TypeIcon ? (
-                    <TypeIcon className={`h-4 w-4 shrink-0 ${typeColor}`} />
-                  ) : null;
-                })()}
+                {task.type &&
+                  (() => {
+                    const TypeIcon = getTaskTypeIcon(task.type);
+                    const typeColor = getTaskTypeColor(task.type);
+                    return TypeIcon ? (
+                      <TypeIcon className={`h-4 w-4 shrink-0 ${typeColor}`} />
+                    ) : null;
+                  })()}
                 <div className="flex-1 min-w-0">
                   <p
                     className={`text-sm ${task.status === "DONE" ? "line-through text-muted-foreground" : "text-foreground"}`}

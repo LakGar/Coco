@@ -1,39 +1,57 @@
-import { NextRequest, NextResponse } from "next/server"
-import { prisma } from "@/lib/prisma"
-import { createNoteSchema, validateRequest } from "@/lib/validations"
-import { rateLimit, addRateLimitHeaders } from "@/lib/rate-limit"
-import { requireTeamAccess, extractTeamId, isAuthError } from "@/lib/auth-middleware"
-import { createValidationErrorResponse, createInternalErrorResponse } from "@/lib/error-handler"
-import { loggerUtils } from "@/lib/logger"
+import { NextRequest, NextResponse } from "next/server";
+import { prisma } from "@/lib/prisma";
+import { createNoteSchema, validateRequest } from "@/lib/validations";
+import { rateLimit, addRateLimitHeaders } from "@/lib/rate-limit";
+import {
+  requireTeamAccess,
+  extractTeamId,
+  isAuthError,
+  hasPermission,
+  requirePermission,
+} from "@/lib/auth-middleware";
+import {
+  createValidationErrorResponse,
+  createInternalErrorResponse,
+} from "@/lib/error-handler";
+import { loggerUtils } from "@/lib/logger";
 
 // GET /api/teams/[teamId]/notes - Get all notes for a team (user can see if they're creator, editor, or viewer)
 export async function GET(
   request: NextRequest,
-  { params }: { params: { teamId: string } | Promise<{ teamId: string }> }
+  { params }: { params: { teamId: string } | Promise<{ teamId: string }> },
 ) {
   try {
     // Extract teamId and check authorization
-    const teamId = await extractTeamId(params)
-    const authResult = await requireTeamAccess(teamId, "READ_ONLY") // Read operations allow READ_ONLY
+    const teamId = await extractTeamId(params);
+    const authResult = await requireTeamAccess(teamId, "READ_ONLY"); // Read operations allow READ_ONLY
 
     if (isAuthError(authResult)) {
-      return authResult.response
+      return authResult.response;
     }
 
-    const { user } = authResult
+    const { user } = authResult;
 
     // Rate limiting
-    const rateLimitResult = await rateLimit(request, "GET", user.clerkId || user.id)
+    const rateLimitResult = await rateLimit(
+      request,
+      "GET",
+      user.clerkId || user.id,
+    );
     if (!rateLimitResult.success) {
       const response = NextResponse.json(
         {
           error: "Too many requests",
           message: "Rate limit exceeded. Please try again later.",
         },
-        { status: 429 }
-      )
-      addRateLimitHeaders(response.headers, rateLimitResult.limit, rateLimitResult.remaining, rateLimitResult.reset)
-      return response
+        { status: 429 },
+      );
+      addRateLimitHeaders(
+        response.headers,
+        rateLimitResult.limit,
+        rateLimitResult.remaining,
+        rateLimitResult.reset,
+      );
+      return response;
     }
 
     // Get all notes where user is creator, editor, or viewer
@@ -99,91 +117,116 @@ export async function GET(
       orderBy: {
         updatedAt: "desc",
       },
-    })
+    });
 
     // Add permission info for each note
     const notesWithPermissions = notes.map((note: any) => {
-      const isCreator = note.createdById === user.id
-      const isEditor = note.editors.some((e: any) => e.userId === user.id)
-      const isViewer = note.viewers.some((v: any) => v.userId === user.id)
+      const isCreator = note.createdById === user.id;
+      const isEditor = note.editors.some((e: any) => e.userId === user.id);
+      const isViewer = note.viewers.some((v: any) => v.userId === user.id);
 
       return {
         ...note,
         canEdit: isCreator || isEditor,
         canDelete: isCreator,
         userRole: isCreator ? "creator" : isEditor ? "editor" : "viewer",
-      }
-    })
+      };
+    });
 
-    const response = NextResponse.json({ notes: notesWithPermissions })
-    addRateLimitHeaders(response.headers, rateLimitResult.limit, rateLimitResult.remaining, rateLimitResult.reset)
-    return response
+    const response = NextResponse.json({ notes: notesWithPermissions });
+    addRateLimitHeaders(
+      response.headers,
+      rateLimitResult.limit,
+      rateLimitResult.remaining,
+      rateLimitResult.reset,
+    );
+    return response;
   } catch (error) {
-    const teamId = await extractTeamId(params).catch(() => "unknown")
+    const teamId = await extractTeamId(params).catch(() => "unknown");
     return createInternalErrorResponse(error, {
       endpoint: "/api/teams/[teamId]/notes",
       method: "GET",
       teamId,
-    })
+    });
   }
 }
 
 // POST /api/teams/[teamId]/notes - Create a new note (only FULL access users)
 export async function POST(
   request: NextRequest,
-  { params }: { params: { teamId: string } | Promise<{ teamId: string }> }
+  { params }: { params: { teamId: string } | Promise<{ teamId: string }> },
 ) {
   try {
     // Extract teamId and check authorization (FULL access required for creating notes)
-    const teamId = await extractTeamId(params)
-    const authResult = await requireTeamAccess(teamId, "FULL")
+    const teamId = await extractTeamId(params);
+    const authResult = await requireTeamAccess(teamId, "FULL");
 
     if (isAuthError(authResult)) {
-      return authResult.response
+      return authResult.response;
     }
 
-    const { user } = authResult
+    const { user, membership } = authResult;
+
+    // Check if user has permission to create notes
+    if (!membership.isAdmin && !membership.canCreateNotes) {
+      return NextResponse.json(
+        {
+          error: "Forbidden",
+          message: "You do not have permission to create notes",
+        },
+        { status: 403 },
+      );
+    }
 
     // Rate limiting
-    const rateLimitResult = await rateLimit(request, "POST", user.clerkId || user.id)
+    const rateLimitResult = await rateLimit(
+      request,
+      "POST",
+      user.clerkId || user.id,
+    );
     if (!rateLimitResult.success) {
       const response = NextResponse.json(
         {
           error: "Too many requests",
           message: "Rate limit exceeded. Please try again later.",
         },
-        { status: 429 }
-      )
-      addRateLimitHeaders(response.headers, rateLimitResult.limit, rateLimitResult.remaining, rateLimitResult.reset)
-      return response
+        { status: 429 },
+      );
+      addRateLimitHeaders(
+        response.headers,
+        rateLimitResult.limit,
+        rateLimitResult.remaining,
+        rateLimitResult.reset,
+      );
+      return response;
     }
 
     // Validate request body
-    const validation = await validateRequest(request, createNoteSchema)
+    const validation = await validateRequest(request, createNoteSchema);
     if (validation.error) {
       return createValidationErrorResponse(validation.error, {
         endpoint: "/api/teams/[teamId]/notes",
         method: "POST",
         teamId,
-      })
+      });
     }
-    const { title, content, editorIds = [], viewerIds = [] } = validation.data
+    const { title, content, editorIds = [], viewerIds = [] } = validation.data;
 
     // Validate that editorIds and viewerIds are team members
     const teamMemberIds = await prisma.careTeamMember.findMany({
       where: { teamId },
       select: { userId: true },
-    })
+    });
     const validUserIds = teamMemberIds
       .map((m: { userId: string | null }) => m.userId)
-      .filter((id: string | null): id is string => id !== null)
+      .filter((id: string | null): id is string => id !== null);
 
     const validEditorIds = (editorIds as string[]).filter((id: string) =>
-      validUserIds.includes(id)
-    )
+      validUserIds.includes(id),
+    );
     const validViewerIds = (viewerIds as string[]).filter((id: string) =>
-      validUserIds.includes(id)
-    )
+      validUserIds.includes(id),
+    );
 
     // Create note with creator as editor by default
     const note = await prisma.note.create({
@@ -246,18 +289,22 @@ export async function POST(
           },
         },
       },
-    })
+    });
 
-    const response = NextResponse.json(note, { status: 201 })
-    addRateLimitHeaders(response.headers, rateLimitResult.limit, rateLimitResult.remaining, rateLimitResult.reset)
-    return response
+    const response = NextResponse.json(note, { status: 201 });
+    addRateLimitHeaders(
+      response.headers,
+      rateLimitResult.limit,
+      rateLimitResult.remaining,
+      rateLimitResult.reset,
+    );
+    return response;
   } catch (error) {
-    const teamId = await extractTeamId(params).catch(() => "unknown")
+    const teamId = await extractTeamId(params).catch(() => "unknown");
     return createInternalErrorResponse(error, {
       endpoint: "/api/teams/[teamId]/notes",
       method: "POST",
       teamId,
-    })
+    });
   }
 }
-

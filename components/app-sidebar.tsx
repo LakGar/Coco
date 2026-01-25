@@ -10,6 +10,7 @@ import {
   FileUser,
   Repeat,
   Phone,
+  Heart,
 } from "lucide-react";
 import { useUser } from "@clerk/nextjs";
 import { useTeamStore } from "@/store/use-team-store";
@@ -160,70 +161,67 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         icon: Phone,
       },
       {
+        title: "Caregiver Burden",
+        url: "/dashboard/caregiver-burden",
+        icon: Heart,
+      },
+      {
         title: "Care Team",
         url: "/dashboard/team",
-        icon: Users,
         items: [
           {
-            title: "Add Team Member",
-            url: "#",
+            title: "Members",
+            url: "/dashboard/team",
           },
           {
-            title: "Team Permissions",
-            url: "#",
-          },
-          {
-            title: "Audit Logs",
-            url: "#",
+            title: "Permissions",
+            url: "/dashboard/team/permissions",
           },
         ],
+        icon: Users,
       },
       {
         title: "Settings",
-        url: "#",
+        url: "/dashboard/settings",
         icon: Settings2,
-        items: [
-          {
-            title: "General",
-            url: "#",
-          },
-          {
-            title: "Team",
-            url: "#",
-          },
-          {
-            title: "Billing",
-            url: "#",
-          },
-          {
-            title: "Limits",
-            url: "#",
-          },
-        ],
       },
     ],
     [],
   );
 
   // Dynamic documents based on active team
+  // Only show documents if we have a valid patient name (not a physician name)
   const documents = React.useMemo(() => {
-    if (!activeTeam || !activeTeam.patientName) {
+    if (!activeTeam) {
+      return [];
+    }
+
+    // Use team name to extract patient name, or use patientName if available
+    // Team name format is typically "Patient's Care Team"
+    const patientName =
+      activeTeam.patientName ||
+      activeTeam.name
+        ?.replace("'s Care Team", "")
+        .replace("'s Care Team", "") ||
+      null;
+
+    if (!patientName) {
       return [];
     }
 
     return [
       {
-        name: `${activeTeam.patientName}'s Care Plan`,
+        name: `${patientName}'s Care Plan`,
         url: "#",
         icon: FileText,
       },
       {
-        name: `${activeTeam.patientName}'s Medical History`,
+        name: `${patientName}'s Medical History`,
         url: "#",
         icon: FileUser,
       },
       {
-        name: `${activeTeam.patientName}'s Medications`,
+        name: `${patientName}'s Medications`,
         url: "#",
         icon: FileText,
       },

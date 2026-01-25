@@ -19,6 +19,7 @@ export const createTaskSchema = z.object({
   priority: taskPrioritySchema,
   status: taskStatusSchema,
   type: taskTypeSchema,
+  isPersonal: z.boolean().optional().default(false),
   dueDate: z.union([z.string().datetime(), z.string().date(), z.null()]).optional().nullable(),
 })
 
@@ -30,6 +31,7 @@ export const updateTaskSchema = z.object({
   priority: taskPrioritySchema.optional(),
   status: taskStatusSchema.optional(),
   type: taskTypeSchema,
+  isPersonal: z.boolean().optional(),
   dueDate: z.union([z.string().datetime(), z.string().date(), z.null()]).optional().nullable(),
 })
 
@@ -166,6 +168,30 @@ export const teamRoleSchema = z.enum(["CAREGIVER", "FAMILY", "PHYSICIAN", "PATIE
 
 export const updateMemberAccessSchema = z.object({
   accessLevel: accessLevelSchema,
+})
+
+export const inviteTeamMemberSchema = z.object({
+  email: emailSchema,
+  name: z.string().min(1, "Name is required").max(200, "Name must be less than 200 characters").trim(),
+  teamRole: teamRoleSchema,
+  isAdmin: z.boolean().optional().default(false),
+  accessLevel: accessLevelSchema.optional().default("FULL"),
+})
+
+export const notificationFrequencySchema = z.enum(['EVERY_EVENT', 'DAILY', 'WEEKLY', 'DISABLED'] as const)
+
+export const notificationSettingsSchema = z.object({
+  contactSetupReminderFrequency: notificationFrequencySchema.optional(),
+  taskDueFrequency: notificationFrequencySchema.optional(),
+  routineMissedFrequency: notificationFrequencySchema.optional(),
+  teamInviteFrequency: notificationFrequencySchema.optional(),
+  permissionChangeFrequency: notificationFrequencySchema.optional(),
+  systemAlertFrequency: notificationFrequencySchema.optional(),
+  emailNotificationsEnabled: z.boolean().optional(),
+  pushNotificationsEnabled: z.boolean().optional(),
+  dailyDigestTime: z.string().regex(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/).optional().nullable(),
+  weeklyDigestDay: z.number().int().min(0).max(6).optional().nullable(),
+  weeklyDigestTime: z.string().regex(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/).optional().nullable(),
 })
 
 // Helper function to validate and parse request body

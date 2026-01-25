@@ -75,6 +75,22 @@ enum RecurrenceType {
   SPECIFIC_DATES
 }
 
+enum NotificationType {
+  CONTACT_SETUP_REMINDER
+  TASK_DUE
+  ROUTINE_MISSED
+  TEAM_INVITE
+  PERMISSION_CHANGE
+  SYSTEM_ALERT
+}
+
+enum NotificationFrequency {
+  EVERY_EVENT
+  DAILY
+  WEEKLY
+  DISABLED
+}
+
 model User {
   id                 String   @id @default(cuid())
   clerkId            String?  @unique
@@ -124,6 +140,12 @@ model User {
   // notifications for this user
   notifications Notification[] @relation("Notifications")
 
+  // caregiver burden scales completed by this user
+  caregiverBurdenScales CaregiverBurdenScale[] @relation("CaregiverBurdenScales")
+
+  // notification preferences
+  notificationSettings UserNotificationSettings?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
@@ -137,13 +159,14 @@ model CareTeam {
   patientId String?
   patient   User?   @relation("PatientTeams", fields: [patientId], references: [id])
 
-  members  CareTeamMember[]
-  tasks    Task[]
-  routines Routine[]
-  moods    Mood[]
-  notes    Note[]
-  contacts Contact[]
-  notifications Notification[]
+  members               CareTeamMember[]
+  tasks                 Task[]
+  routines              Routine[]
+  moods                 Mood[]
+  notes                 Note[]
+  contacts              Contact[]
+  notifications         Notification[]
+  caregiverBurdenScales CaregiverBurdenScale[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -162,6 +185,45 @@ model CareTeamMember {
   // access control (what you asked for)
   isAdmin     Boolean     @default(false)
   accessLevel AccessLevel @default(FULL)
+
+  // Granular permissions - admins have all permissions automatically
+  // Tasks permissions
+  canViewTasks   Boolean @default(true)
+  canCreateTasks Boolean @default(true)
+  canEditTasks   Boolean @default(true)
+  canDeleteTasks Boolean @default(true)
+
+  // Notes permissions
+  canViewNotes   Boolean @default(true)
+  canCreateNotes Boolean @default(true)
+  canEditNotes   Boolean @default(true)
+  canDeleteNotes Boolean @default(true)
+
+  // Routines permissions
+  canViewRoutines   Boolean @default(true)
+  canCreateRoutines Boolean @default(true)
+  canEditRoutines   Boolean @default(true)
+  canDeleteRoutines Boolean @default(true)
+
+  // Contacts permissions
+  canViewContacts   Boolean @default(true)
+  canCreateContacts Boolean @default(true)
+  canEditContacts   Boolean @default(true)
+  canDeleteContacts Boolean @default(true)
+
+  // Moods permissions
+  canViewMoods   Boolean @default(true)
+  canCreateMoods Boolean @default(true)
+
+  // Caregiver Burden permissions
+  canViewBurdenScales   Boolean @default(true)
+  canCreateBurdenScales Boolean @default(true)
+
+  // Team management permissions
+  canViewMembers       Boolean @default(true)
+  canInviteMembers     Boolean @default(false) // Only admins by default
+  canRemoveMembers     Boolean @default(false) // Only admins by default
+  canManagePermissions Boolean @default(false) // Only admins by default
 
   // Invite system
   inviteCode  String?   @unique
@@ -201,7 +263,10 @@ model Task {
 
   priority TaskPriority @default(MEDIUM)
   status   TaskStatus   @default(TODO)
-  type     TaskType?    // Optional task type (MEDICATION, APPOINTMENTS, SOCIAL, HEALTH_PERSONAL)
+  type     TaskType? // Optional task type (MEDICATION, APPOINTMENTS, SOCIAL, HEALTH_PERSONAL)
+
+  // Personal tasks are only visible to the creator
+  isPersonal Boolean @default(false)
 
   dueDate DateTime? // Optional due date and time
 
@@ -216,6 +281,7 @@ model Task {
   @@index([status])
   @@index([priority])
   @@index([type])
+  @@index([isPersonal])
 }
 
 model Routine {
@@ -311,9 +377,9 @@ model Mood {
 }
 
 model Note {
-  id        String  @id @default(cuid())
-  teamId    String
-  team      CareTeam @relation(fields: [teamId], references: [id])
+  id     String   @id @default(cuid())
+  teamId String
+  team   CareTeam @relation(fields: [teamId], references: [id])
 
   // Note content
   title   String
@@ -379,33 +445,24 @@ enum ContactType {
   OTHER
 }
 
-enum NotificationType {
-  CONTACT_SETUP_REMINDER
-  TASK_DUE
-  ROUTINE_MISSED
-  TEAM_INVITE
-  PERMISSION_CHANGE
-  SYSTEM_ALERT
-}
-
 model Contact {
-  id          String      @id @default(cuid())
-  teamId      String
-  team        CareTeam    @relation(fields: [teamId], references: [id], onDelete: Cascade)
-  
-  type        ContactType
-  name        String
-  phone       String?
-  email       String?
-  address     String?
-  notes       String?
-  isPrimary   Boolean     @default(false) // For emergency contacts, mark primary
-  
+  id     String   @id @default(cuid())
+  teamId String
+  team   CareTeam @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  type      ContactType
+  name      String
+  phone     String?
+  email     String?
+  address   String?
+  notes     String?
+  isPrimary Boolean     @default(false) // For emergency contacts, mark primary
+
   createdById String
-  createdBy   User        @relation("CreatedContacts", fields: [createdById], references: [id])
-  
-  createdAt   DateTime    @default(now())
-  updatedAt   DateTime    @updatedAt
+  createdBy   User   @relation("CreatedContacts", fields: [createdById], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([teamId])
   @@index([type])
@@ -413,28 +470,88 @@ model Contact {
 }
 
 model Notification {
-  id        String           @id @default(cuid())
-  teamId    String
-  team      CareTeam         @relation(fields: [teamId], references: [id], onDelete: Cascade)
-  
-  userId    String           // User who should see this notification
-  user      User             @relation("Notifications", fields: [userId], references: [id], onDelete: Cascade)
-  
-  type      NotificationType
-  title     String
-  message   String
-  isRead    Boolean          @default(false)
-  readAt    DateTime?
-  
+  id     String   @id @default(cuid())
+  teamId String
+  team   CareTeam @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  userId String // User who should see this notification
+  user   User   @relation("Notifications", fields: [userId], references: [id], onDelete: Cascade)
+
+  type    NotificationType
+  title   String
+  message String
+  isRead  Boolean          @default(false)
+  readAt  DateTime?
+
   // Optional link to related resource
   linkUrl   String?
   linkLabel String?
-  
-  createdAt DateTime         @default(now())
-  updatedAt DateTime         @updatedAt
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([teamId])
   @@index([userId])
   @@index([isRead])
   @@index([createdAt])
+}
+
+// Caregiver Burden Scale - Zarit Burden Interview (ZBI) questionnaire
+model CaregiverBurdenScale {
+  id     String   @id @default(cuid())
+  teamId String
+  team   CareTeam @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  userId String // Caregiver/family member who completed the questionnaire
+  user   User   @relation("CaregiverBurdenScales", fields: [userId], references: [id], onDelete: Cascade)
+
+  // ZBI has 22 questions, each scored 0-4 (Never, Rarely, Sometimes, Quite Frequently, Nearly Always)
+  // Store as JSON: { "question1": 0, "question2": 3, ... }
+  responses Json // Map of question number -> score (0-4)
+
+  // Total score (sum of all responses, 0-88)
+  totalScore Int
+
+  // Interpretation: 0-20 (Little or no burden), 21-40 (Mild to moderate burden), 41-60 (Moderate to severe burden), 61-88 (Severe burden)
+  burdenLevel String // "LOW" | "MILD_MODERATE" | "MODERATE_SEVERE" | "SEVERE"
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([teamId])
+  @@index([userId])
+  @@index([createdAt])
+}
+
+// User Notification Settings - allows users to configure notification preferences
+model UserNotificationSettings {
+  id     String @id @default(cuid())
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Notification frequency preferences for each type
+  contactSetupReminderFrequency NotificationFrequency @default(EVERY_EVENT)
+  taskDueFrequency              NotificationFrequency @default(EVERY_EVENT)
+  routineMissedFrequency        NotificationFrequency @default(EVERY_EVENT)
+  teamInviteFrequency           NotificationFrequency @default(EVERY_EVENT)
+  permissionChangeFrequency     NotificationFrequency @default(EVERY_EVENT)
+  systemAlertFrequency          NotificationFrequency @default(EVERY_EVENT)
+
+  // Email notification preferences
+  emailNotificationsEnabled Boolean @default(true)
+
+  // Push notification preferences (for future use)
+  pushNotificationsEnabled Boolean @default(true)
+
+  // Daily digest time (for DAILY frequency) - stored as HH:MM in UTC
+  dailyDigestTime String? @default("09:00") // 9 AM UTC default
+
+  // Weekly digest day and time (for WEEKLY frequency)
+  weeklyDigestDay  Int?    @default(1) // Monday = 1, Sunday = 0
+  weeklyDigestTime String? @default("09:00") // 9 AM UTC default
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
 }

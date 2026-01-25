@@ -85,7 +85,7 @@ export default function Hero() {
           <div className="max-w-6xl mx-auto w-full h-[700px] rounded-3xl overflow-hidden relative">
             {/* Content will go here */}
             <Image
-              src="/dash.png"
+              src="/hero.png"
               alt="Hero Content"
               fill
               className=" max-w-7xl h-[900px"

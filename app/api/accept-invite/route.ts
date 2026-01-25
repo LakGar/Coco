@@ -127,11 +127,37 @@ export async function POST(req: Request) {
       }
 
       // Update the SPECIFIC invite record by ID to ensure we're updating the exact record
+      // Initialize permissions based on access level (if not already set)
       const updatedMember = await tx.careTeamMember.update({
         where: { id: currentInvite.id }, // Use the ID from the record we just fetched to ensure exact match
         data: {
           userId: user.id,
           acceptedAt: new Date(),
+          // Set default permissions if not already set (for existing invites)
+          canViewTasks: true,
+          canCreateTasks: currentInvite.accessLevel === 'FULL' ? true : undefined,
+          canEditTasks: currentInvite.accessLevel === 'FULL' ? true : undefined,
+          canDeleteTasks: false, // Only admins can delete
+          canViewNotes: true,
+          canCreateNotes: currentInvite.accessLevel === 'FULL' ? true : undefined,
+          canEditNotes: currentInvite.accessLevel === 'FULL' ? true : undefined,
+          canDeleteNotes: false,
+          canViewRoutines: true,
+          canCreateRoutines: currentInvite.accessLevel === 'FULL' ? true : undefined,
+          canEditRoutines: currentInvite.accessLevel === 'FULL' ? true : undefined,
+          canDeleteRoutines: false,
+          canViewContacts: true,
+          canCreateContacts: currentInvite.accessLevel === 'FULL' ? true : undefined,
+          canEditContacts: currentInvite.accessLevel === 'FULL' ? true : undefined,
+          canDeleteContacts: false,
+          canViewMoods: true,
+          canCreateMoods: currentInvite.accessLevel === 'FULL' ? true : undefined,
+          canViewBurdenScales: currentInvite.accessLevel === 'FULL' ? true : undefined,
+          canCreateBurdenScales: false, // Only caregivers/family with admin
+          canViewMembers: true,
+          canInviteMembers: false,
+          canRemoveMembers: false,
+          canManagePermissions: false,
         },
       })
 

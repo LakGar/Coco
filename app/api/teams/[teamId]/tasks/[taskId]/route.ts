@@ -21,7 +21,15 @@ export async function PATCH(
       return authResult.response
     }
 
-    const { user } = authResult
+    const { user, membership } = authResult
+
+    // Check if user has permission to edit tasks
+    if (!membership.isAdmin && !membership.canEditTasks) {
+      return NextResponse.json(
+        { error: 'Forbidden', message: 'You do not have permission to edit tasks' },
+        { status: 403 }
+      )
+    }
 
     // Rate limiting
     const rateLimitResult = await rateLimit(req, "PATCH", user.clerkId || user.id)
@@ -74,10 +82,12 @@ export async function PATCH(
       priority,
       status,
       type,
+      isPersonal,
       dueDate,
     } = validation.data
 
     // Update task
+    // If converting to personal task, ensure only the creator can see it
     const updatedTask = await prisma.task.update({
       where: { id: taskId },
       data: {
@@ -88,6 +98,7 @@ export async function PATCH(
         ...(priority && { priority: priority as TaskPriority }),
         ...(status && { status: status as TaskStatus }),
         ...(type !== undefined && { type: type ? (type as TaskType) : null }),
+        ...(isPersonal !== undefined && { isPersonal }),
         ...(dueDate !== undefined && { dueDate: dueDate ? new Date(dueDate) : null }),
       },
       include: {
@@ -143,7 +154,15 @@ export async function DELETE(
       return authResult.response
     }
 
-    const { user } = authResult
+    const { user, membership } = authResult
+
+    // Check if user has permission to delete tasks
+    if (!membership.isAdmin && !membership.canDeleteTasks) {
+      return NextResponse.json(
+        { error: 'Forbidden', message: 'You do not have permission to delete tasks' },
+        { status: 403 }
+      )
+    }
 
     // Rate limiting (sensitive operation)
     const rateLimitResult = await rateLimit(req, "DELETE", user.clerkId || user.id)

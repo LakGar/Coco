@@ -29,6 +29,31 @@ export interface TeamMembershipResult {
     teamRole: string
     isAdmin: boolean
     accessLevel: AccessLevel
+    // Granular permissions
+    canViewTasks?: boolean
+    canCreateTasks?: boolean
+    canEditTasks?: boolean
+    canDeleteTasks?: boolean
+    canViewNotes?: boolean
+    canCreateNotes?: boolean
+    canEditNotes?: boolean
+    canDeleteNotes?: boolean
+    canViewRoutines?: boolean
+    canCreateRoutines?: boolean
+    canEditRoutines?: boolean
+    canDeleteRoutines?: boolean
+    canViewContacts?: boolean
+    canCreateContacts?: boolean
+    canEditContacts?: boolean
+    canDeleteContacts?: boolean
+    canViewMoods?: boolean
+    canCreateMoods?: boolean
+    canViewBurdenScales?: boolean
+    canCreateBurdenScales?: boolean
+    canViewMembers?: boolean
+    canInviteMembers?: boolean
+    canRemoveMembers?: boolean
+    canManagePermissions?: boolean
   }
 }
 
@@ -92,6 +117,39 @@ export async function requireTeamMembership(
     where: {
       teamId,
       userId,
+    },
+    select: {
+      id: true,
+      teamId: true,
+      userId: true,
+      teamRole: true,
+      isAdmin: true,
+      accessLevel: true,
+      // Include all granular permissions
+      canViewTasks: true,
+      canCreateTasks: true,
+      canEditTasks: true,
+      canDeleteTasks: true,
+      canViewNotes: true,
+      canCreateNotes: true,
+      canEditNotes: true,
+      canDeleteNotes: true,
+      canViewRoutines: true,
+      canCreateRoutines: true,
+      canEditRoutines: true,
+      canDeleteRoutines: true,
+      canViewContacts: true,
+      canCreateContacts: true,
+      canEditContacts: true,
+      canDeleteContacts: true,
+      canViewMoods: true,
+      canCreateMoods: true,
+      canViewBurdenScales: true,
+      canCreateBurdenScales: true,
+      canViewMembers: true,
+      canInviteMembers: true,
+      canRemoveMembers: true,
+      canManagePermissions: true,
     },
   })
 
@@ -187,4 +245,45 @@ export function isAuthError(
   result: AuthResult | TeamMembershipResult | ReturnType<typeof requireTeamAccess> | AuthError
 ): result is AuthError {
   return 'response' in result && result.response instanceof NextResponse
+}
+
+/**
+ * Check if user has a specific permission
+ * Admins automatically have all permissions
+ */
+export function hasPermission(
+  membership: TeamMembershipResult['membership'],
+  permission: string
+): boolean {
+  // Admins have all permissions
+  if (membership.isAdmin) {
+    return true
+  }
+
+  // Check the specific permission
+  return (membership as any)[permission] === true
+}
+
+/**
+ * Require a specific permission for an action
+ * Returns an error response if permission is missing
+ */
+export function requirePermission(
+  membership: TeamMembershipResult['membership'],
+  permission: string,
+  action: string = 'perform this action'
+): AuthError | null {
+  if (!hasPermission(membership, permission)) {
+    return {
+      response: NextResponse.json(
+        {
+          error: 'Forbidden',
+          message: `You do not have permission to ${action}`,
+        },
+        { status: 403 }
+      ),
+    }
+  }
+
+  return null
 }
