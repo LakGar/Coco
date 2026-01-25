@@ -64,7 +64,7 @@ export default function Hero() {
                 transition={{ duration: 0.8, delay: 0.4, ease: "easeOut" }}
               >
                 <a
-                  href="#waitlist"
+                  href="/sign-up"
                   className="px-6 sm:px-8 py-3 sm:py-3.5 bg-white/25 text-white rounded-full font-normal text-sm sm:text-base text-center hover:bg-white hover:text-black transition-all duration-200"
                 >
                   Join our community
@@ -80,17 +80,21 @@ export default function Hero() {
           </div>
         </div>
 
-        {/* Empty Container for Future Content - Starts after buttons, extends past background */}
-        <div className="hidden md:block relative z-10 px-6 lg:px-12 pt-12 pb-8  w-full ">
-          <div className="max-w-6xl mx-auto w-full h-[700px] rounded-3xl overflow-hidden relative">
-            {/* Content will go here */}
+        {/* Hero Preview Image - Starts after buttons, extends past background */}
+        <div className="hidden md:block relative z-10 px-6 lg:px-12 pt-12 pb-8 w-full">
+          <motion.div
+            className="max-w-6xl mx-auto w-full h-[600px] rounded-3xl overflow-hidden relative shadow-2xl"
+            initial={{ opacity: 0, y: 30 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.8, delay: 0.6 }}
+          >
             <Image
               src="/hero.png"
-              alt="Hero Content"
+              alt="COCO App Preview"
               fill
-              className=" max-w-7xl h-[900px"
+              className="object-cover"
             />
-          </div>
+          </motion.div>
         </div>
       </div>
     </div>

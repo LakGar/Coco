@@ -2,11 +2,13 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import Image from "next/image";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 
 export default function Navbar() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const router = useRouter();
+  const pathname = usePathname();
+  const isLandingPage = pathname === "/";
   return (
     <>
       <svg className="absolute inset-0 w-0 h-0">
@@ -30,8 +32,11 @@ export default function Navbar() {
         </defs>
       </svg>
 
-      <header className="relative z-20 flex items-center justify-between p-6">
-        <div className="flex items-center space-x-3 cursor-pointer">
+      <header className={`relative z-20 flex items-center justify-between p-6 ${isLandingPage ? "" : "bg-white border-b border-gray-100"}`}>
+        <div 
+          className="flex items-center space-x-3 cursor-pointer"
+          onClick={() => router.push("/")}
+        >
           <div className="relative w-12 h-12">
             <Image
               src="/logo.png"
@@ -41,66 +46,109 @@ export default function Navbar() {
               priority
             />
           </div>
-          <span className="text-2xl font-light text-white font-serif tracking-wider">
+          <span className={`text-2xl font-light ${isLandingPage ? "text-white" : "text-gray-900"} font-serif tracking-wider`}>
             COCO
           </span>
         </div>
 
         {/* Desktop Navigation */}
         <nav className="hidden md:flex items-center space-x-2">
+          {isLandingPage ? (
+            <>
+              <a
+                href="#demo"
+                className="text-white/80 hover:text-white text-xs font-light px-3 py-2 rounded-full hover:bg-white/10 transition-all duration-200"
+              >
+                How it works
+              </a>
+              <a
+                href="#waitlist"
+                className="text-white/80 hover:text-white text-xs font-light px-3 py-2 rounded-full hover:bg-white/10 transition-all duration-200"
+              >
+                Join pilot
+              </a>
+            </>
+          ) : null}
           <a
-            href="#demo"
-            className="text-white/80 hover:text-white text-xs font-light px-3 py-2 rounded-full hover:bg-white/10 transition-all duration-200"
-          >
-            How it works
-          </a>
-          <a
-            href="#waitlist"
-            className="text-white/80 hover:text-white text-xs font-light px-3 py-2 rounded-full hover:bg-white/10 transition-all duration-200"
-          >
-            Join pilot
-          </a>
-          <a
-            href="#about"
-            className="text-white/80 hover:text-white text-xs font-light px-3 py-2 rounded-full hover:bg-white/10 transition-all duration-200"
+            href="/about"
+            className={isLandingPage 
+              ? "text-white/80 hover:text-white text-xs font-light px-3 py-2 rounded-full hover:bg-white/10 transition-all duration-200"
+              : "text-gray-600 hover:text-gray-900 text-xs font-light px-3 py-2 rounded-full hover:bg-gray-100 transition-all duration-200"
+            }
           >
             About
+          </a>
+          <a
+            href="/team"
+            className={isLandingPage 
+              ? "text-white/80 hover:text-white text-xs font-light px-3 py-2 rounded-full hover:bg-white/10 transition-all duration-200"
+              : "text-gray-600 hover:text-gray-900 text-xs font-light px-3 py-2 rounded-full hover:bg-gray-100 transition-all duration-200"
+            }
+          >
+            Team
+          </a>
+          <a
+            href="/pricing"
+            className={isLandingPage 
+              ? "text-white/80 hover:text-white text-xs font-light px-3 py-2 rounded-full hover:bg-white/10 transition-all duration-200"
+              : "text-gray-600 hover:text-gray-900 text-xs font-light px-3 py-2 rounded-full hover:bg-gray-100 transition-all duration-200"
+            }
+          >
+            Pricing
+          </a>
+          <a
+            href="/faq"
+            className={isLandingPage 
+              ? "text-white/80 hover:text-white text-xs font-light px-3 py-2 rounded-full hover:bg-white/10 transition-all duration-200"
+              : "text-gray-600 hover:text-gray-900 text-xs font-light px-3 py-2 rounded-full hover:bg-gray-100 transition-all duration-200"
+            }
+          >
+            FAQ
           </a>
         </nav>
 
         {/* Desktop CTA Button */}
-        <div
-          id="gooey-btn"
-          className="hidden md:flex relative items-center group"
-          style={{ filter: "url(#gooey-filter)" }}
-        >
-          <button className="absolute right-0 px-2.5 py-2 rounded-full bg-white text-black font-normal text-xs transition-all duration-300 hover:bg-white/90 cursor-pointer h-8 flex items-center justify-center -translate-x-10 group-hover:-translate-x-19 z-0">
-            <svg
-              className="w-3 h-3"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
+        {isLandingPage ? (
+          <div
+            id="gooey-btn"
+            className="hidden md:flex relative items-center group"
+            style={{ filter: "url(#gooey-filter)" }}
+          >
+            <button className="absolute right-0 px-2.5 py-2 rounded-full bg-white text-black font-normal text-xs transition-all duration-300 hover:bg-white/90 cursor-pointer h-8 flex items-center justify-center -translate-x-10 group-hover:-translate-x-19 z-0">
+              <svg
+                className="w-3 h-3"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M7 17L17 7M17 7H7M17 7V17"
+                />
+              </svg>
+            </button>
+            <button
+              className="px-6 py-2 rounded-full bg-white text-black font-normal text-xs transition-all duration-300 hover:bg-white/90 cursor-pointer h-8 flex items-center z-10"
+              onClick={() => router.push("/sign-in")}
             >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M7 17L17 7M17 7H7M17 7V17"
-              />
-            </svg>
-          </button>
+              Get the App
+            </button>
+          </div>
+        ) : (
           <button
-            className="px-6 py-2 rounded-full bg-white text-black font-normal text-xs transition-all duration-300 hover:bg-white/90 cursor-pointer h-8 flex items-center z-10"
+            className="hidden md:flex px-6 py-2 rounded-full bg-gradient-to-r from-amber-500 to-orange-500 text-white font-normal text-xs transition-all duration-300 hover:from-amber-600 hover:to-orange-600 cursor-pointer h-8 items-center"
             onClick={() => router.push("/sign-in")}
           >
             Get the App
           </button>
-        </div>
+        )}
 
         {/* Mobile Menu Toggle Button */}
         <button
           onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-          className="md:hidden p-2 text-white hover:text-white/80 transition-colors relative z-50"
+          className={`md:hidden p-2 ${isLandingPage ? "text-white" : "text-gray-900"} hover:opacity-80 transition-colors relative z-50`}
           aria-label="Toggle menu"
         >
           <motion.div
@@ -216,44 +264,78 @@ export default function Navbar() {
 
               {/* Menu Items */}
               <nav className="flex-1 flex flex-col px-6 py-8 space-y-1 overflow-y-auto">
+                {isLandingPage && (
+                  <>
+                    <motion.a
+                      href="#demo"
+                      onClick={() => setIsMobileMenuOpen(false)}
+                      initial={{ opacity: 0, x: -20 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: 0.1 }}
+                      className="text-white/80 hover:text-white text-lg font-light py-4 border-b border-white/10 transition-all duration-200"
+                    >
+                      How it works
+                    </motion.a>
+                    <motion.a
+                      href="#waitlist"
+                      onClick={() => setIsMobileMenuOpen(false)}
+                      initial={{ opacity: 0, x: -20 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: 0.15 }}
+                      className="text-white/80 hover:text-white text-lg font-light py-4 border-b border-white/10 transition-all duration-200"
+                    >
+                      Join pilot
+                    </motion.a>
+                  </>
+                )}
                 <motion.a
-                  href="#demo"
+                  href="/about"
                   onClick={() => setIsMobileMenuOpen(false)}
                   initial={{ opacity: 0, x: -20 }}
                   animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: 0.1 }}
-                  className="text-white/80 hover:text-white text-lg font-light py-4 border-b border-white/10 transition-all duration-200"
-                >
-                  How it works
-                </motion.a>
-                <motion.a
-                  href="#waitlist"
-                  onClick={() => setIsMobileMenuOpen(false)}
-                  initial={{ opacity: 0, x: -20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: 0.15 }}
-                  className="text-white/80 hover:text-white text-lg font-light py-4 border-b border-white/10 transition-all duration-200"
-                >
-                  Join pilot
-                </motion.a>
-                <motion.a
-                  href="#about"
-                  onClick={() => setIsMobileMenuOpen(false)}
-                  initial={{ opacity: 0, x: -20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: 0.2 }}
+                  transition={{ delay: isLandingPage ? 0.2 : 0.1 }}
                   className="text-white/80 hover:text-white text-lg font-light py-4 border-b border-white/10 transition-all duration-200"
                 >
                   About
                 </motion.a>
+                <motion.a
+                  href="/team"
+                  onClick={() => setIsMobileMenuOpen(false)}
+                  initial={{ opacity: 0, x: -20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: isLandingPage ? 0.25 : 0.15 }}
+                  className="text-white/80 hover:text-white text-lg font-light py-4 border-b border-white/10 transition-all duration-200"
+                >
+                  Team
+                </motion.a>
+                <motion.a
+                  href="/pricing"
+                  onClick={() => setIsMobileMenuOpen(false)}
+                  initial={{ opacity: 0, x: -20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: isLandingPage ? 0.3 : 0.2 }}
+                  className="text-white/80 hover:text-white text-lg font-light py-4 border-b border-white/10 transition-all duration-200"
+                >
+                  Pricing
+                </motion.a>
+                <motion.a
+                  href="/faq"
+                  onClick={() => setIsMobileMenuOpen(false)}
+                  initial={{ opacity: 0, x: -20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: isLandingPage ? 0.35 : 0.25 }}
+                  className="text-white/80 hover:text-white text-lg font-light py-4 border-b border-white/10 transition-all duration-200"
+                >
+                  FAQ
+                </motion.a>
                 <motion.div
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.3 }}
+                  transition={{ delay: isLandingPage ? 0.4 : 0.3 }}
                   className="pt-6"
                 >
                   <a
-                    href="#waitlist"
+                    href="/sign-up"
                     onClick={() => setIsMobileMenuOpen(false)}
                     className="block w-full px-6 py-4 rounded-full bg-white text-black font-normal text-base text-center transition-all duration-300 hover:bg-white/90"
                   >
