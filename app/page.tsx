@@ -14,7 +14,6 @@ export default function Home() {
       <Features />
       <Community />
       <AppShowcase />
-      <HowItWorks />
       <Testimonials />
       <CTA />
       <Footer />

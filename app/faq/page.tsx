@@ -4,6 +4,7 @@ import Navbar from "@/components/landing/navbar";
 import Footer from "@/components/landing/footer";
 import { useState } from "react";
 import { ChevronDown } from "lucide-react";
+import Image from "next/image";
 
 const faqs = [
   {
@@ -106,7 +107,7 @@ function FAQItem({ question, answer }: { question: string; answer: string }) {
           {question}
         </span>
         <ChevronDown
-          className={`w-5 h-5 text-gray-400 flex-shrink-0 transition-transform duration-300 ${
+          className={`w-5 h-5 text-gray-400 group-hover:text-amber-600 shrink-0 transition-all duration-300 ${
             isOpen ? "rotate-180" : ""
           }`}
         />
@@ -119,7 +120,7 @@ function FAQItem({ question, answer }: { question: string; answer: string }) {
           transition={{ duration: 0.3 }}
           className="pb-6"
         >
-          <p className="text-gray-600 leading-relaxed">{answer}</p>
+          <p className="text-gray-600 leading-relaxed text-base">{answer}</p>
         </motion.div>
       )}
     </div>
@@ -129,56 +130,73 @@ function FAQItem({ question, answer }: { question: string; answer: string }) {
 export default function FAQPage() {
   return (
     <div className="min-h-screen bg-white">
-      <Navbar />
-      
+      <div className="z-20 absolute top-5 left-0 w-full px-10">
+        <Navbar />
+      </div>
+
       {/* Hero Section */}
-      <section className="pt-32 pb-20 px-4 sm:px-6 lg:px-8 relative overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-br from-amber-50 via-orange-50/50 to-rose-50">
-          <div className="absolute top-0 right-0 w-96 h-96 bg-amber-200/20 rounded-full blur-3xl" />
-          <div className="absolute bottom-0 left-0 w-96 h-96 bg-rose-200/20 rounded-full blur-3xl" />
-        </div>
-        
-        <div className="max-w-4xl mx-auto text-center relative z-10">
-          <motion.h1
-            className="text-5xl sm:text-6xl lg:text-7xl font-light text-gray-900 mb-8 leading-tight"
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6 }}
-          >
-            Frequently Asked <span className="italic text-amber-600">Questions</span>
-          </motion.h1>
-          <motion.p
-            className="text-xl text-gray-700 leading-relaxed max-w-2xl mx-auto"
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6, delay: 0.2 }}
-          >
-            Find answers to common questions about COCO, our features, and how we can help you care better together.
-          </motion.p>
+      <section className="min-h-screen bg-white relative overflow-visible md:p-6 flex flex-col items-center justify-center">
+        {/* Hero Content Container with Image Background */}
+        <div className="w-screen h-screen md:w-[calc(100vw-3rem)] md:h-[calc(100vh-3rem)] relative md:rounded-3xl lg:rounded-3xl overflow-hidden md:overflow-visible flex flex-col">
+          {/* Background Image */}
+          <div className="absolute inset-0 overflow-hidden md:rounded-3xl lg:rounded-3xl">
+            <Image
+              src="https://images.unsplash.com/photo-1521791136064-7986c2920216?w=1920&h=1080&fit=crop&q=80"
+              alt="FAQ support"
+              fill
+              className="object-cover"
+              priority
+              unoptimized
+            />
+            <div className="absolute inset-0 bg-gradient-to-br from-amber-950/50 via-orange-950/40 to-rose-950/50" />
+          </div>
+
+          {/* Hero Content */}
+          <div className="relative z-10 flex-1 flex items-center justify-center px-4 sm:px-6 lg:px-8">
+            <div className="max-w-4xl mx-auto text-center w-full">
+              <motion.h1
+                className="text-5xl sm:text-6xl lg:text-7xl font-light text-white mb-6 leading-tight"
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.6 }}
+              >
+                Frequently Asked <span className="italic">Questions</span>
+              </motion.h1>
+              <motion.p
+                className="text-xl text-white/95 leading-relaxed max-w-2xl mx-auto"
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.6, delay: 0.2 }}
+              >
+                Find answers to common questions about COCO, our features, and
+                how we can help you care better together.
+              </motion.p>
+            </div>
+          </div>
         </div>
       </section>
 
       {/* FAQ Sections */}
-      <section className="py-24 px-4 sm:px-6 lg:px-8 bg-white relative overflow-hidden">
+      <section className="py-32 px-4 sm:px-6 lg:px-8 bg-white relative overflow-hidden">
         <div className="absolute inset-0 overflow-hidden pointer-events-none">
-          <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-amber-100/20 rounded-full blur-3xl" />
-          <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-rose-100/20 rounded-full blur-3xl" />
+          <div className="absolute top-1/4 left-0 w-[600px] h-[600px] bg-amber-200/20 rounded-full blur-3xl" />
+          <div className="absolute bottom-1/4 right-0 w-[600px] h-[600px] bg-rose-200/20 rounded-full blur-3xl" />
         </div>
-        
+
         <div className="max-w-4xl mx-auto relative z-10">
           {faqs.map((category, categoryIndex) => (
             <motion.div
               key={category.category}
-              className="mb-16 last:mb-0"
+              className="mb-20 last:mb-0"
               initial={{ opacity: 0, y: 20 }}
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }}
               transition={{ duration: 0.5, delay: categoryIndex * 0.1 }}
             >
-              <h2 className="text-3xl font-light text-gray-900 mb-8">
+              <h2 className="text-4xl sm:text-5xl font-light text-gray-900 mb-8 leading-tight">
                 {category.category}
               </h2>
-              <div className="p-8 rounded-3xl bg-gradient-to-br from-white/90 to-white/50 backdrop-blur-sm border border-gray-200/50">
+              <div className="p-8 rounded-3xl bg-gradient-to-br from-white/90 to-white/50 backdrop-blur-sm border border-gray-200/50 hover:border-amber-200/50 transition-all duration-500">
                 {category.questions.map((faq, index) => (
                   <FAQItem key={index} question={faq.q} answer={faq.a} />
                 ))}
@@ -189,12 +207,27 @@ export default function FAQPage() {
       </section>
 
       {/* Still Have Questions CTA */}
-      <section className="py-24 px-4 sm:px-6 lg:px-8 bg-gradient-to-br from-amber-500 to-orange-500 relative overflow-hidden">
+      <section className="py-32 px-4 sm:px-6 lg:px-8 bg-gradient-to-br from-amber-500 via-orange-500 to-rose-500 relative overflow-hidden">
         <div className="absolute inset-0">
-          <div className="absolute top-0 left-0 w-96 h-96 bg-white/10 rounded-full blur-3xl" />
-          <div className="absolute bottom-0 right-0 w-96 h-96 bg-white/10 rounded-full blur-3xl" />
+          <motion.div
+            className="absolute inset-0"
+            animate={{
+              backgroundPosition: ["0% 0%", "100% 100%"],
+            }}
+            transition={{
+              duration: 20,
+              repeat: Infinity,
+              repeatType: "reverse",
+            }}
+            style={{
+              backgroundImage:
+                "radial-gradient(circle at 20% 50%, rgba(255, 255, 255, 0.15) 0%, transparent 50%), radial-gradient(circle at 80% 80%, rgba(255, 255, 255, 0.15) 0%, transparent 50%)",
+            }}
+          />
         </div>
-        
+        <div className="absolute top-1/4 left-0 w-[600px] h-[600px] bg-white/10 rounded-full blur-3xl" />
+        <div className="absolute bottom-1/4 right-0 w-[600px] h-[600px] bg-white/10 rounded-full blur-3xl" />
+
         <div className="max-w-4xl mx-auto text-center relative z-10">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
@@ -202,11 +235,12 @@ export default function FAQPage() {
             viewport={{ once: true }}
             transition={{ duration: 0.6 }}
           >
-            <h2 className="text-4xl sm:text-5xl font-light text-white mb-6">
-              Still have questions?
+            <h2 className="text-5xl sm:text-6xl lg:text-7xl font-light text-white mb-6 leading-tight">
+              Still have <span className="italic">questions</span>?
             </h2>
-            <p className="text-xl text-white/90 mb-8 max-w-2xl mx-auto">
-              Can&apos;t find what you&apos;re looking for? Our support team is here to help.
+            <p className="text-xl text-white/90 mb-10 max-w-2xl mx-auto leading-relaxed">
+              Can&apos;t find what you&apos;re looking for? Our support team is
+              here to help.
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
               <a

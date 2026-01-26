@@ -32,8 +32,10 @@ export default function Navbar() {
         </defs>
       </svg>
 
-      <header className={`relative z-20 flex items-center justify-between p-6 ${isLandingPage ? "" : "bg-white border-b border-gray-100"}`}>
-        <div 
+      <header
+        className={`relative z-20 flex items-center justify-between p-6 `}
+      >
+        <div
           className="flex items-center space-x-3 cursor-pointer"
           onClick={() => router.push("/")}
         >
@@ -46,7 +48,9 @@ export default function Navbar() {
               priority
             />
           </div>
-          <span className={`text-2xl font-light ${isLandingPage ? "text-white" : "text-gray-900"} font-serif tracking-wider`}>
+          <span
+            className={`text-2xl font-light text-white font-serif tracking-wider`}
+          >
             COCO
           </span>
         </div>
@@ -71,36 +75,32 @@ export default function Navbar() {
           ) : null}
           <a
             href="/about"
-            className={isLandingPage 
-              ? "text-white/80 hover:text-white text-xs font-light px-3 py-2 rounded-full hover:bg-white/10 transition-all duration-200"
-              : "text-gray-600 hover:text-gray-900 text-xs font-light px-3 py-2 rounded-full hover:bg-gray-100 transition-all duration-200"
+            className={
+              "text-white/80 hover:text-white text-xs font-light px-3 py-2 rounded-full hover:bg-white/10 transition-all duration-200"
             }
           >
             About
           </a>
           <a
             href="/team"
-            className={isLandingPage 
-              ? "text-white/80 hover:text-white text-xs font-light px-3 py-2 rounded-full hover:bg-white/10 transition-all duration-200"
-              : "text-gray-600 hover:text-gray-900 text-xs font-light px-3 py-2 rounded-full hover:bg-gray-100 transition-all duration-200"
+            className={
+              "text-white/80 hover:text-white text-xs font-light px-3 py-2 rounded-full hover:bg-white/10 transition-all duration-200"
             }
           >
             Team
           </a>
           <a
             href="/pricing"
-            className={isLandingPage 
-              ? "text-white/80 hover:text-white text-xs font-light px-3 py-2 rounded-full hover:bg-white/10 transition-all duration-200"
-              : "text-gray-600 hover:text-gray-900 text-xs font-light px-3 py-2 rounded-full hover:bg-gray-100 transition-all duration-200"
+            className={
+              "text-white/80 hover:text-white text-xs font-light px-3 py-2 rounded-full hover:bg-white/10 transition-all duration-200"
             }
           >
             Pricing
           </a>
           <a
             href="/faq"
-            className={isLandingPage 
-              ? "text-white/80 hover:text-white text-xs font-light px-3 py-2 rounded-full hover:bg-white/10 transition-all duration-200"
-              : "text-gray-600 hover:text-gray-900 text-xs font-light px-3 py-2 rounded-full hover:bg-gray-100 transition-all duration-200"
+            className={
+              "text-white/80 hover:text-white text-xs font-light px-3 py-2 rounded-full hover:bg-white/10 transition-all duration-200"
             }
           >
             FAQ

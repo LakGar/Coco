@@ -3,13 +3,15 @@ import { motion } from "framer-motion";
 import Navbar from "@/components/landing/navbar";
 import Footer from "@/components/landing/footer";
 import { Check } from "lucide-react";
+import Image from "next/image";
 
 const plans = [
   {
     name: "Free",
     price: "$0",
     period: "forever",
-    description: "Perfect for individuals getting started with care coordination.",
+    description:
+      "Perfect for individuals getting started with care coordination.",
     features: [
       "Up to 3 care team members",
       "Basic routine tracking",
@@ -24,7 +26,7 @@ const plans = [
   },
   {
     name: "Family",
-    price: "$29",
+    price: "$19",
     period: "per month",
     description: "Ideal for families coordinating care together.",
     features: [
@@ -67,44 +69,61 @@ const plans = [
 export default function PricingPage() {
   return (
     <div className="min-h-screen bg-white">
-      <Navbar />
-      
+      <div className="z-20 absolute top-5 left-0 w-full px-10">
+        <Navbar />
+      </div>
+
       {/* Hero Section */}
-      <section className="pt-32 pb-20 px-4 sm:px-6 lg:px-8 relative overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-br from-amber-50 via-orange-50/50 to-rose-50">
-          <div className="absolute top-0 right-0 w-96 h-96 bg-amber-200/20 rounded-full blur-3xl" />
-          <div className="absolute bottom-0 left-0 w-96 h-96 bg-rose-200/20 rounded-full blur-3xl" />
-        </div>
-        
-        <div className="max-w-4xl mx-auto text-center relative z-10">
-          <motion.h1
-            className="text-5xl sm:text-6xl lg:text-7xl font-light text-gray-900 mb-8 leading-tight"
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6 }}
-          >
-            Simple, transparent <span className="italic text-amber-600">pricing</span>
-          </motion.h1>
-          <motion.p
-            className="text-xl text-gray-700 leading-relaxed max-w-2xl mx-auto"
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6, delay: 0.2 }}
-          >
-            Choose the plan that works for you. All plans include access to our supportive community.
-          </motion.p>
+      <section className="min-h-screen bg-white relative overflow-visible md:p-6 flex flex-col items-center justify-center">
+        {/* Hero Content Container with Image Background */}
+        <div className="w-screen h-screen md:w-[calc(100vw-3rem)] md:h-[calc(100vh-3rem)] relative md:rounded-3xl lg:rounded-3xl overflow-hidden md:overflow-visible flex flex-col">
+          {/* Background Image */}
+          <div className="absolute inset-0 overflow-hidden md:rounded-3xl lg:rounded-3xl">
+            <Image
+              src="https://images.unsplash.com/photo-1552664730-d307ca884978?w=1920&h=1080&fit=crop&q=80"
+              alt="Pricing plans"
+              fill
+              className="object-cover"
+              priority
+              unoptimized
+            />
+            <div className="absolute inset-0 bg-gradient-to-br from-amber-950/50 via-orange-950/40 to-rose-950/50" />
+          </div>
+
+          {/* Hero Content */}
+          <div className="relative z-10 flex-1 flex items-center justify-center px-4 sm:px-6 lg:px-8">
+            <div className="max-w-4xl mx-auto text-center w-full">
+              <motion.h1
+                className="text-5xl sm:text-6xl lg:text-7xl font-light text-white mb-6 leading-tight"
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.6 }}
+              >
+                Simple, transparent <span className="italic">pricing</span>
+              </motion.h1>
+              <motion.p
+                className="text-xl text-white/95 leading-relaxed max-w-2xl mx-auto"
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.6, delay: 0.2 }}
+              >
+                Choose the plan that works for you. All plans include access to
+                our supportive community.
+              </motion.p>
+            </div>
+          </div>
         </div>
       </section>
 
       {/* Pricing Cards */}
-      <section className="py-24 px-4 sm:px-6 lg:px-8 bg-white relative overflow-hidden">
+      <section className="py-32 px-4 sm:px-6 lg:px-8 bg-white relative overflow-hidden">
         <div className="absolute inset-0 overflow-hidden pointer-events-none">
-          <div className="absolute top-1/2 left-1/4 w-96 h-96 bg-amber-100/20 rounded-full blur-3xl" />
-          <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-rose-100/20 rounded-full blur-3xl" />
+          <div className="absolute top-1/4 left-0 w-[600px] h-[600px] bg-amber-200/20 rounded-full blur-3xl" />
+          <div className="absolute bottom-1/4 right-0 w-[600px] h-[600px] bg-rose-200/20 rounded-full blur-3xl" />
         </div>
-        
+
         <div className="max-w-7xl mx-auto relative z-10">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             {plans.map((plan, index) => (
               <motion.div
                 key={plan.name}
@@ -116,17 +135,19 @@ export default function PricingPage() {
                 viewport={{ once: true }}
                 transition={{ duration: 0.5, delay: index * 0.1 }}
               >
-                <div className={`h-full p-10 rounded-3xl bg-gradient-to-br from-white/90 to-white/50 backdrop-blur-sm border-2 transition-all duration-500 hover:shadow-2xl ${
-                  plan.popular
-                    ? `border-transparent bg-gradient-to-br ${plan.gradient} shadow-xl scale-105`
-                    : "border-gray-200/50 hover:border-gray-300/50"
-                }`}>
+                <div
+                  className={`h-full p-10 rounded-3xl bg-gradient-to-br from-white/90 to-white/50 backdrop-blur-sm border-2 transition-all duration-500 hover:shadow-2xl ${
+                    plan.popular
+                      ? `border-transparent bg-gradient-to-br ${plan.gradient} shadow-xl scale-105`
+                      : "border-gray-200/50 hover:border-gray-300/50"
+                  }`}
+                >
                   {plan.popular && (
                     <div className="absolute -top-4 left-1/2 -translate-x-1/2 px-5 py-1.5 bg-gradient-to-r from-amber-500 to-orange-500 text-white text-sm font-medium rounded-full shadow-lg">
                       Most Popular
                     </div>
                   )}
-                  
+
                   <div className="mb-8">
                     <h3 className="text-2xl font-medium text-gray-900 mb-2">
                       {plan.name}
@@ -143,16 +164,24 @@ export default function PricingPage() {
                   <ul className="space-y-4 mb-8">
                     {plan.features.map((feature) => (
                       <li key={feature} className="flex items-start gap-3">
-                        <div className={`mt-0.5 shrink-0 w-5 h-5 rounded-full bg-gradient-to-br ${plan.popular ? "from-amber-400 to-orange-500" : "from-gray-300 to-gray-400"} flex items-center justify-center`}>
+                        <div
+                          className={`mt-0.5 shrink-0 w-5 h-5 rounded-full bg-gradient-to-br ${plan.popular ? "from-amber-400 to-orange-500" : "from-gray-300 to-gray-400"} flex items-center justify-center`}
+                        >
                           <Check className="w-3 h-3 text-white" />
                         </div>
-                        <span className="text-gray-700 text-sm leading-relaxed">{feature}</span>
+                        <span className="text-gray-700 text-sm leading-relaxed">
+                          {feature}
+                        </span>
                       </li>
                     ))}
                   </ul>
 
                   <a
-                    href={plan.name === "Professional" ? "mailto:sales@coco.app" : "/sign-up"}
+                    href={
+                      plan.name === "Professional"
+                        ? "mailto:sales@coco.app"
+                        : "/sign-up"
+                    }
                     className={`block w-full text-center py-4 px-6 rounded-full font-medium transition-all duration-300 ${
                       plan.popular
                         ? "bg-gradient-to-r from-amber-500 to-orange-500 text-white hover:from-amber-600 hover:to-orange-600 shadow-lg hover:shadow-xl hover:scale-105"
@@ -169,22 +198,26 @@ export default function PricingPage() {
       </section>
 
       {/* FAQ Section */}
-      <section className="py-24 px-4 sm:px-6 lg:px-8 bg-gradient-to-b from-gray-50 to-white relative overflow-hidden">
+      <section className="py-32 px-4 sm:px-6 lg:px-8 bg-gradient-to-b from-white via-gray-50/50 to-white relative overflow-hidden">
         <div className="absolute inset-0 overflow-hidden pointer-events-none">
-          <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-amber-100/30 rounded-full blur-3xl" />
+          <div className="absolute top-1/4 left-0 w-[600px] h-[600px] bg-amber-200/20 rounded-full blur-3xl" />
+          <div className="absolute bottom-1/4 right-0 w-[600px] h-[600px] bg-rose-200/20 rounded-full blur-3xl" />
         </div>
-        
+
         <div className="max-w-4xl mx-auto relative z-10">
           <motion.div
-            className="text-center mb-12"
+            className="text-center mb-16"
             initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
             transition={{ duration: 0.6 }}
           >
-            <h2 className="text-4xl sm:text-5xl font-light text-gray-900 mb-4">
+            <h2 className="text-5xl sm:text-6xl lg:text-7xl font-light text-gray-900 mb-6 leading-tight">
               Common <span className="italic text-amber-600">questions</span>
             </h2>
+            <p className="text-xl text-gray-600 max-w-2xl mx-auto leading-relaxed">
+              Everything you need to know about our plans and pricing.
+            </p>
           </motion.div>
 
           <div className="space-y-4">
@@ -208,7 +241,7 @@ export default function PricingPage() {
             ].map((faq, index) => (
               <motion.div
                 key={faq.q}
-                className="p-6 rounded-2xl bg-white/80 backdrop-blur-sm border border-gray-200/50 hover:border-gray-300/50 hover:shadow-lg transition-all duration-300"
+                className="p-8 rounded-3xl bg-gradient-to-br from-white/90 to-white/50 backdrop-blur-sm border border-gray-200/50 hover:border-amber-200/50 hover:shadow-2xl hover:shadow-amber-500/10 transition-all duration-500"
                 initial={{ opacity: 0, y: 20 }}
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true }}
@@ -225,12 +258,27 @@ export default function PricingPage() {
       </section>
 
       {/* CTA Section */}
-      <section className="py-24 px-4 sm:px-6 lg:px-8 bg-gradient-to-br from-amber-500 to-orange-500 relative overflow-hidden">
+      <section className="py-32 px-4 sm:px-6 lg:px-8 bg-gradient-to-br from-amber-500 via-orange-500 to-rose-500 relative overflow-hidden">
         <div className="absolute inset-0">
-          <div className="absolute top-0 left-0 w-96 h-96 bg-white/10 rounded-full blur-3xl" />
-          <div className="absolute bottom-0 right-0 w-96 h-96 bg-white/10 rounded-full blur-3xl" />
+          <motion.div
+            className="absolute inset-0"
+            animate={{
+              backgroundPosition: ["0% 0%", "100% 100%"],
+            }}
+            transition={{
+              duration: 20,
+              repeat: Infinity,
+              repeatType: "reverse",
+            }}
+            style={{
+              backgroundImage:
+                "radial-gradient(circle at 20% 50%, rgba(255, 255, 255, 0.15) 0%, transparent 50%), radial-gradient(circle at 80% 80%, rgba(255, 255, 255, 0.15) 0%, transparent 50%)",
+            }}
+          />
         </div>
-        
+        <div className="absolute top-1/4 left-0 w-[600px] h-[600px] bg-white/10 rounded-full blur-3xl" />
+        <div className="absolute bottom-1/4 right-0 w-[600px] h-[600px] bg-white/10 rounded-full blur-3xl" />
+
         <div className="max-w-4xl mx-auto text-center relative z-10">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
@@ -238,11 +286,12 @@ export default function PricingPage() {
             viewport={{ once: true }}
             transition={{ duration: 0.6 }}
           >
-            <h2 className="text-4xl sm:text-5xl font-light text-white mb-6">
-              Still have questions?
+            <h2 className="text-5xl sm:text-6xl lg:text-7xl font-light text-white mb-6 leading-tight">
+              Still have <span className="italic">questions</span>?
             </h2>
-            <p className="text-xl text-white/90 mb-8 max-w-2xl mx-auto">
-              Our team is here to help. Reach out and we&apos;ll get back to you within 24 hours.
+            <p className="text-xl text-white/90 mb-10 max-w-2xl mx-auto leading-relaxed">
+              Our team is here to help. Reach out and we&apos;ll get back to you
+              within 24 hours.
             </p>
             <a
               href="mailto:support@coco.app"
