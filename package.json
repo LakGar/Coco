@@ -12,7 +12,7 @@
     "test:coverage": "jest --coverage",
     "db:push": "npx prisma@6.19.2 db push",
     "db:reset": "npx prisma@6.19.2 db push --force-reset",
-    "db:studio": "npx prisma@6.19.2 studio",
+    "db:studio": "npx prisma@6.19.2 studio --port 5555",
     "db:generate": "npx prisma@6.19.2 generate",
     "db:migrate": "npx prisma@6.19.2 migrate dev",
     "db:verify": "node scripts/verify-db.js"
@@ -59,6 +59,7 @@
     "sonner": "^2.0.7",
     "svix": "^1.40.0",
     "tailwind-merge": "^3.4.0",
+    "vercel": "^50.5.2",
     "zod": "^4.3.6",
     "zustand": "^5.0.10"
   },

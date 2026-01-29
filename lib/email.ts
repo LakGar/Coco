@@ -1,5 +1,5 @@
 import { Resend } from 'resend'
-import { log } from './logger'
+import { log, loggerUtils } from './logger'
 
 if (!process.env.RESEND_API_KEY) {
   log.warn({ type: "email_config_missing" }, 'RESEND_API_KEY is not set. Email sending will be disabled.')

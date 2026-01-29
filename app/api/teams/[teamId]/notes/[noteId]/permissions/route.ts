@@ -59,7 +59,7 @@ export async function PATCH(
 
     // Remove creator from editorIds (they're always an editor)
     const editorIdsWithoutCreator = validEditorIds.filter(
-      (id) => id !== user.id
+      (id: string) => id !== user.id
     )
 
     // Update editors
@@ -74,7 +74,7 @@ export async function PATCH(
     // Then create new editors
     if (editorIdsWithoutCreator.length > 0) {
       await prisma.noteEditor.createMany({
-        data: editorIdsWithoutCreator.map((id) => ({
+        data: editorIdsWithoutCreator.map((id: string) => ({
           noteId,
           userId: id,
         })),
@@ -100,7 +100,7 @@ export async function PATCH(
     // Update viewers
     // Remove users who are now editors from viewers
     const viewerIdsWithoutEditors = validViewerIds.filter(
-      (id) => id !== user.id && !editorIdsWithoutCreator.includes(id)
+      (id: string) => id !== user.id && !editorIdsWithoutCreator.includes(id)
     )
 
     // Delete all existing viewers
@@ -111,7 +111,7 @@ export async function PATCH(
     // Create new viewers
     if (viewerIdsWithoutEditors.length > 0) {
       await prisma.noteViewer.createMany({
-        data: viewerIdsWithoutEditors.map((id) => ({
+        data: viewerIdsWithoutEditors.map((id: string) => ({
           noteId,
           userId: id,
         })),

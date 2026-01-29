@@ -104,12 +104,20 @@ export function getRateLimitIdentifier(userId: string | null, ip: string | null)
   return "anonymous"
 }
 
+// Rate limit result type
+export type RateLimitResult = {
+  success: boolean
+  limit: number
+  remaining: number
+  reset: number
+}
+
 // Rate limit middleware for Next.js API routes
 export async function rateLimit(
   request: Request,
   method: string,
   userId: string | null = null
-): Promise<{ success: boolean; limit: number; remaining: number; reset: number }> {
+): Promise<RateLimitResult> {
   // Skip rate limiting if Redis is not configured (for local development)
   if (!process.env.UPSTASH_REDIS_REST_URL || !process.env.UPSTASH_REDIS_REST_TOKEN) {
     log.warn({ type: "rate_limit_disabled" }, "Rate limiting disabled: Redis credentials not set")

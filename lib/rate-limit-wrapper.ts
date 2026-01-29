@@ -16,11 +16,11 @@ type RouteHandler = (
 export function withRateLimit(
   handler: RouteHandler,
   method: string = "GET"
-) {
+): RouteHandler {
   return async (
     req: NextRequest | Request,
     params: any
-  ): Promise<NextResponse> {
+  ): Promise<NextResponse> => {
     try {
       const { userId } = await auth()
       

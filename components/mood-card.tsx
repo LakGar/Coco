@@ -61,10 +61,17 @@ const MOOD_CATEGORIES = [
       { value: "CONFUSED", label: "Confused", emoji: "😕", icon: Brain, color: "text-purple-600", bgColor: "bg-purple-50 hover:bg-purple-100" },
     ],
   },
-] as const
+]
 
 // Flatten for easy lookup
-const ALL_MOODS = MOOD_CATEGORIES.flatMap((cat) => cat.moods)
+const ALL_MOODS: Array<{
+  value: string
+  label: string
+  emoji: string
+  icon: React.ComponentType<{ className?: string }>
+  color: string
+  bgColor: string
+}> = MOOD_CATEGORIES.flatMap((cat) => cat.moods)
 
 export function MoodCard({ teamId, latestMood, onMoodTracked }: MoodCardProps) {
   const [dialogOpen, setDialogOpen] = React.useState(false)

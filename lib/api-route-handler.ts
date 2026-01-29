@@ -14,7 +14,6 @@ import {
 } from './rate-limit'
 import {
   validateRequest,
-  type ZodSchema,
 } from './validations'
 import {
   createValidationErrorResponse,
@@ -60,7 +59,7 @@ export interface RouteHandlerOptions {
   /**
    * Validation schema for request body (optional)
    */
-  schema?: ZodSchema<any>
+  schema?: z.ZodSchema<any>
   /**
    * HTTP method for rate limiting
    */

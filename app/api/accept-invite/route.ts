@@ -85,6 +85,7 @@ export async function POST(req: Request) {
           acceptedAt: true,
           inviteCode: true,
           inviteEmail: true,
+          accessLevel: true,
         },
       })
 
