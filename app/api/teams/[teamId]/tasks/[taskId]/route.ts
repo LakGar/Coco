@@ -1,48 +1,75 @@
-import { prisma } from '@/lib/prisma'
-import { NextResponse } from 'next/server'
-import { TaskPriority, TaskStatus, TaskType } from '@prisma/client'
-import { updateTaskSchema, validateRequest, formatZodError } from '@/lib/validations'
-import { rateLimit, addRateLimitHeaders } from '@/lib/rate-limit'
-import { requireTeamAccess, isAuthError } from '@/lib/auth-middleware'
-import { createValidationErrorResponse, createNotFoundErrorResponse, createInternalErrorResponse } from '@/lib/error-handler'
+import { prisma } from "@/lib/prisma";
+import { NextResponse } from "next/server";
+import { TaskPriority, TaskStatus, TaskType } from "@prisma/client";
+import {
+  updateTaskSchema,
+  validateRequest,
+  formatZodError,
+} from "@/lib/validations";
+import { rateLimit, addRateLimitHeaders } from "@/lib/rate-limit";
+import { requireTeamAccess, isAuthError } from "@/lib/auth-middleware";
+import {
+  createValidationErrorResponse,
+  createNotFoundErrorResponse,
+  createInternalErrorResponse,
+} from "@/lib/error-handler";
+import { createAuditLog, AUDIT_ACTIONS } from "@/lib/audit";
 
 export async function PATCH(
   req: Request,
-  { params }: { params: { teamId: string; taskId: string } | Promise<{ teamId: string; taskId: string }> }
+  {
+    params,
+  }: {
+    params:
+      | { teamId: string; taskId: string }
+      | Promise<{ teamId: string; taskId: string }>;
+  },
 ) {
   try {
     // Extract params and check authorization (requires FULL access for write operations)
-    const resolvedParams = params instanceof Promise ? await params : params
-    const { teamId, taskId } = resolvedParams
+    const resolvedParams = params instanceof Promise ? await params : params;
+    const { teamId, taskId } = resolvedParams;
 
-    const authResult = await requireTeamAccess(teamId, 'FULL')
+    const authResult = await requireTeamAccess(teamId, "FULL");
 
     if (isAuthError(authResult)) {
-      return authResult.response
+      return authResult.response;
     }
 
-    const { user, membership } = authResult
+    const { user, membership } = authResult;
 
     // Check if user has permission to edit tasks
     if (!membership.isAdmin && !membership.canEditTasks) {
       return NextResponse.json(
-        { error: 'Forbidden', message: 'You do not have permission to edit tasks' },
-        { status: 403 }
-      )
+        {
+          error: "Forbidden",
+          message: "You do not have permission to edit tasks",
+        },
+        { status: 403 },
+      );
     }
 
     // Rate limiting
-    const rateLimitResult = await rateLimit(req, "PATCH", user.clerkId || user.id)
+    const rateLimitResult = await rateLimit(
+      req,
+      "PATCH",
+      user.clerkId || user.id,
+    );
     if (!rateLimitResult.success) {
       const response = NextResponse.json(
         {
-          error: 'Too many requests',
-          message: 'Rate limit exceeded. Please try again later.',
+          error: "Too many requests",
+          message: "Rate limit exceeded. Please try again later.",
         },
-        { status: 429 }
-      )
-      addRateLimitHeaders(response.headers, rateLimitResult.limit, rateLimitResult.remaining, rateLimitResult.reset)
-      return response
+        { status: 429 },
+      );
+      addRateLimitHeaders(
+        response.headers,
+        rateLimitResult.limit,
+        rateLimitResult.remaining,
+        rateLimitResult.reset,
+      );
+      return response;
     }
 
     // Find the task
@@ -51,28 +78,28 @@ export async function PATCH(
         id: taskId,
         teamId: teamId,
       },
-    })
+    });
 
     if (!task) {
-      return createNotFoundErrorResponse('Task', {
-        endpoint: '/api/teams/[teamId]/tasks/[taskId]',
-        method: 'PATCH',
+      return createNotFoundErrorResponse("Task", {
+        endpoint: "/api/teams/[teamId]/tasks/[taskId]",
+        method: "PATCH",
         teamId,
         taskId,
         userId: user.id,
-      })
+      });
     }
 
     // Validate request body
-    const validation = await validateRequest(req, updateTaskSchema)
+    const validation = await validateRequest(req, updateTaskSchema);
     if (validation.error) {
       return createValidationErrorResponse(validation.error, {
-        endpoint: '/api/teams/[teamId]/tasks/[taskId]',
-        method: 'PATCH',
+        endpoint: "/api/teams/[teamId]/tasks/[taskId]",
+        method: "PATCH",
         teamId,
         taskId,
         userId: user.id,
-      })
+      });
     }
     const {
       name,
@@ -84,7 +111,7 @@ export async function PATCH(
       type,
       isPersonal,
       dueDate,
-    } = validation.data
+    } = validation.data;
 
     // Update task
     // If converting to personal task, ensure only the creator can see it
@@ -92,14 +119,20 @@ export async function PATCH(
       where: { id: taskId },
       data: {
         ...(name !== undefined && { name: name.trim() }),
-        ...(description !== undefined && { description: description?.trim() || null }),
+        ...(description !== undefined && {
+          description: description?.trim() || null,
+        }),
         ...(patientName !== undefined && { patientName: patientName || null }),
-        ...(assignedToId !== undefined && { assignedToId: assignedToId || null }),
+        ...(assignedToId !== undefined && {
+          assignedToId: assignedToId || null,
+        }),
         ...(priority && { priority: priority as TaskPriority }),
         ...(status && { status: status as TaskStatus }),
         ...(type !== undefined && { type: type ? (type as TaskType) : null }),
         ...(isPersonal !== undefined && { isPersonal }),
-        ...(dueDate !== undefined && { dueDate: dueDate ? new Date(dueDate) : null }),
+        ...(dueDate !== undefined && {
+          dueDate: dueDate ? new Date(dueDate) : null,
+        }),
       },
       include: {
         createdBy: {
@@ -123,59 +156,95 @@ export async function PATCH(
           },
         },
       },
-    })
+    });
 
-    const response = NextResponse.json({ task: updatedTask })
-    addRateLimitHeaders(response.headers, rateLimitResult.limit, rateLimitResult.remaining, rateLimitResult.reset)
-    return response
+    const auditAction =
+      status && status === "DONE"
+        ? AUDIT_ACTIONS.TASK_COMPLETED
+        : AUDIT_ACTIONS.TASK_UPDATED;
+    await createAuditLog({
+      teamId,
+      actorId: user.id,
+      action: auditAction,
+      entityType: "Task",
+      entityId: taskId,
+      metadata: { name: updatedTask.name, status: updatedTask.status },
+    });
+
+    const response = NextResponse.json({ task: updatedTask });
+    addRateLimitHeaders(
+      response.headers,
+      rateLimitResult.limit,
+      rateLimitResult.remaining,
+      rateLimitResult.reset,
+    );
+    return response;
   } catch (error) {
-    const resolvedParams = params instanceof Promise ? await params : params
+    const resolvedParams = params instanceof Promise ? await params : params;
     return createInternalErrorResponse(error, {
-      endpoint: '/api/teams/[teamId]/tasks/[taskId]',
-      method: 'PATCH',
+      endpoint: "/api/teams/[teamId]/tasks/[taskId]",
+      method: "PATCH",
       teamId: resolvedParams.teamId,
       taskId: resolvedParams.taskId,
-    })
+    });
   }
 }
 
 export async function DELETE(
   req: Request,
-  { params }: { params: { teamId: string; taskId: string } | Promise<{ teamId: string; taskId: string }> }
+  {
+    params,
+  }: {
+    params:
+      | { teamId: string; taskId: string }
+      | Promise<{ teamId: string; taskId: string }>;
+  },
 ) {
   try {
     // Extract params and check authorization (requires FULL access for delete operations)
-    const resolvedParams = params instanceof Promise ? await params : params
-    const { teamId, taskId } = resolvedParams
+    const resolvedParams = params instanceof Promise ? await params : params;
+    const { teamId, taskId } = resolvedParams;
 
-    const authResult = await requireTeamAccess(teamId, 'FULL')
+    const authResult = await requireTeamAccess(teamId, "FULL");
 
     if (isAuthError(authResult)) {
-      return authResult.response
+      return authResult.response;
     }
 
-    const { user, membership } = authResult
+    const { user, membership } = authResult;
 
     // Check if user has permission to delete tasks
     if (!membership.isAdmin && !membership.canDeleteTasks) {
       return NextResponse.json(
-        { error: 'Forbidden', message: 'You do not have permission to delete tasks' },
-        { status: 403 }
-      )
+        {
+          error: "Forbidden",
+          message: "You do not have permission to delete tasks",
+        },
+        { status: 403 },
+      );
     }
 
     // Rate limiting (sensitive operation)
-    const rateLimitResult = await rateLimit(req, "DELETE", user.clerkId || user.id)
+    const rateLimitResult = await rateLimit(
+      req,
+      "DELETE",
+      user.clerkId || user.id,
+    );
     if (!rateLimitResult.success) {
       const response = NextResponse.json(
-        { 
-          error: 'Too many requests',
-          message: 'Rate limit exceeded. Please try again later.',
+        {
+          error: "Too many requests",
+          message: "Rate limit exceeded. Please try again later.",
         },
-        { status: 429 }
-      )
-      addRateLimitHeaders(response.headers, rateLimitResult.limit, rateLimitResult.remaining, rateLimitResult.reset)
-      return response
+        { status: 429 },
+      );
+      addRateLimitHeaders(
+        response.headers,
+        rateLimitResult.limit,
+        rateLimitResult.remaining,
+        rateLimitResult.reset,
+      );
+      return response;
     }
 
     // Find the task
@@ -184,32 +253,39 @@ export async function DELETE(
         id: taskId,
         teamId: teamId,
       },
-    })
+    });
 
     if (!task) {
-      return createNotFoundErrorResponse('Task', {
-        endpoint: '/api/teams/[teamId]/tasks/[taskId]',
-        method: 'DELETE',
+      return createNotFoundErrorResponse("Task", {
+        endpoint: "/api/teams/[teamId]/tasks/[taskId]",
+        method: "DELETE",
         teamId,
         taskId,
         userId: user.id,
-      })
+      });
     }
 
-    // Delete task
+    await createAuditLog({
+      teamId,
+      actorId: user.id,
+      action: AUDIT_ACTIONS.TASK_DELETED,
+      entityType: "Task",
+      entityId: taskId,
+      metadata: { name: task.name },
+    });
+
     await prisma.task.delete({
       where: { id: taskId },
-    })
+    });
 
-    return NextResponse.json({ success: true })
+    return NextResponse.json({ success: true });
   } catch (error) {
-    const resolvedParams = params instanceof Promise ? await params : params
+    const resolvedParams = params instanceof Promise ? await params : params;
     return createInternalErrorResponse(error, {
-      endpoint: '/api/teams/[teamId]/tasks/[taskId]',
-      method: 'DELETE',
+      endpoint: "/api/teams/[teamId]/tasks/[taskId]",
+      method: "DELETE",
       teamId: resolvedParams.teamId,
       taskId: resolvedParams.taskId,
-    })
+    });
   }
 }
-

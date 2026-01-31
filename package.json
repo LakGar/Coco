@@ -10,11 +10,11 @@
     "test": "jest",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
-    "db:push": "npx prisma@6.19.2 db push",
-    "db:reset": "npx prisma@6.19.2 db push --force-reset",
+    "db:push": "dotenv -e .env.local -- npx prisma@6.19.2 db push",
+    "db:reset": "dotenv -e .env.local -- npx prisma@6.19.2 db push --force-reset",
     "db:studio": "dotenv -e .env.local -- npx prisma@6.19.2 studio",
     "db:generate": "npx prisma@6.19.2 generate",
-    "db:migrate": "npx prisma@6.19.2 migrate dev",
+    "db:migrate": "dotenv -e .env.local -- npx prisma@6.19.2 migrate dev",
     "db:verify": "node scripts/verify-db.js"
   },
   "dependencies": {
@@ -51,6 +51,7 @@
     "pino": "^9.6.0",
     "pino-pretty": "^13.0.0",
     "prisma": "^6.19.2",
+    "recharts": "^2.15.0",
     "react": "19.2.3",
     "react-dom": "19.2.3",
     "react-email": "^3.0.0",

@@ -4,11 +4,11 @@ import { log, loggerUtils } from "./logger";
 if (!process.env.RESEND_API_KEY) {
   log.warn(
     { type: "email_config_missing" },
-    "RESEND_API_KEY is not set. Email sending will be disabled."
+    "RESEND_API_KEY is not set. Email sending will be disabled.",
   );
   log.warn(
     { type: "email_config_missing" },
-    "For testing, sign up at https://resend.com and add RESEND_API_KEY to .env.local"
+    "For testing, sign up at https://resend.com and add RESEND_API_KEY to .env.local",
   );
 }
 
@@ -36,7 +36,7 @@ export async function sendInviteEmail({
   if (!resend) {
     log.info(
       { type: "email_not_configured", to },
-      "Email service not configured. Would send invite"
+      "Email service not configured. Would send invite",
     );
     return { success: false, error: "Email service not configured" };
   }
@@ -188,4 +188,164 @@ export function getInviteEmailTemplate({
 </body>
 </html>
   `;
+}
+
+/**
+ * Send a generic notification email (in-app notification companion).
+ */
+export async function sendNotificationEmail({
+  to,
+  subject,
+  title,
+  message,
+  linkUrl,
+  linkLabel = "View",
+}: {
+  to: string;
+  subject: string;
+  title: string;
+  message: string;
+  linkUrl?: string;
+  linkLabel?: string;
+}) {
+  if (!resend) {
+    log.info(
+      { type: "email_not_configured", to },
+      "Email service not configured. Would send notification",
+    );
+    return { success: false, error: "Email service not configured" };
+  }
+
+  const isProduction =
+    process.env.NODE_ENV === "production" ||
+    process.env.VERCEL_ENV === "production";
+  const appUrl = isProduction
+    ? "https://joincoco.app"
+    : process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+  const fullLinkUrl = linkUrl
+    ? linkUrl.startsWith("http")
+      ? linkUrl
+      : `${appUrl}${linkUrl}`
+    : appUrl;
+
+  const html = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${title}</title>
+</head>
+<body style="margin: 0; padding: 0; font-family: Georgia, 'Times New Roman', serif; background-color: #ffffff;">
+  <table role="presentation" style="width: 100%; border-collapse: collapse;">
+    <tr>
+      <td style="padding: 40px 20px;">
+        <h1 style="margin: 0 0 16px; font-size: 20px; font-weight: 400; color: #1a1a1a;">${title}</h1>
+        <p style="margin: 0 0 24px; font-size: 16px; color: #4a4a4a; line-height: 1.6;">${message}</p>
+        ${linkUrl ? `<a href="${fullLinkUrl}" style="display: inline-block; padding: 12px 24px; background-color: #1a1a1a; color: #ffffff; text-decoration: none; font-size: 14px;">${linkLabel}</a>` : ""}
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
+  `.trim();
+
+  try {
+    const { data, error } = await resend.emails.send({
+      from: process.env.RESEND_FROM_EMAIL || "Coco <onboarding@resend.dev>",
+      to,
+      subject,
+      html,
+    });
+    if (error) {
+      loggerUtils.logError(error, { type: "email_send_error", to });
+      return { success: false, error };
+    }
+    return { success: true, data };
+  } catch (error) {
+    loggerUtils.logError(error, { type: "email_send_error", to });
+    return { success: false, error };
+  }
+}
+
+export type DigestSection = { title: string; items: string[] };
+
+/**
+ * Send a daily or weekly digest email (HTML with sections).
+ */
+export async function sendDigestEmail({
+  to,
+  subject,
+  sections,
+  dashboardUrl,
+}: {
+  to: string;
+  subject: string;
+  sections: DigestSection[];
+  dashboardUrl: string;
+}): Promise<{ success: boolean; data?: unknown; error?: string }> {
+  if (!resend) {
+    log.info(
+      { type: "email_not_configured", to },
+      "Email service not configured. Would send digest",
+    );
+    return { success: false, error: "Email service not configured" };
+  }
+
+  const sectionsHtml = sections
+    .filter((s) => s.items.length > 0)
+    .map(
+      (s) => `
+        <tr><td style="padding: 0 0 8px; font-size: 14px; font-weight: 600; color: #1a1a1a;">${s.title}</td></tr>
+        ${s.items.map((item) => `<tr><td style="padding: 0 0 4px 16px; font-size: 14px; color: #4a4a4a;">• ${item}</td></tr>`).join("")}
+        <tr><td style="padding: 0 0 16px;"></td></tr>
+      `,
+    )
+    .join("");
+
+  const html = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${subject}</title>
+</head>
+<body style="margin: 0; padding: 0; font-family: Georgia, 'Times New Roman', serif; background-color: #ffffff;">
+  <table role="presentation" style="width: 100%; border-collapse: collapse;">
+    <tr>
+      <td style="padding: 40px 20px;">
+        <h1 style="margin: 0 0 24px; font-size: 20px; font-weight: 400; color: #1a1a1a;">${subject}</h1>
+        <table role="presentation" style="width: 100%; max-width: 560px;">
+          ${sectionsHtml || "<tr><td style='color: #6b6b6b;'>No new updates this period.</td></tr>"}
+        </table>
+        <p style="margin: 24px 0 0;">
+          <a href="${dashboardUrl}" style="display: inline-block; padding: 12px 24px; background-color: #1a1a1a; color: #ffffff; text-decoration: none; font-size: 14px;">Open dashboard</a>
+        </p>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
+  `.trim();
+
+  try {
+    const { data, error } = await resend.emails.send({
+      from: process.env.RESEND_FROM_EMAIL || "Coco <onboarding@resend.dev>",
+      to,
+      subject,
+      html,
+    });
+    if (error) {
+      loggerUtils.logError(error, { type: "email_send_error", to });
+      return {
+        success: false,
+        error: typeof error === "string" ? error : JSON.stringify(error),
+      };
+    }
+    return { success: true, data };
+  } catch (err) {
+    loggerUtils.logError(err, { type: "email_send_error", to });
+    return { success: false, error: String(err) };
+  }
 }

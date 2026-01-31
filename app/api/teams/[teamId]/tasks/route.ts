@@ -19,6 +19,8 @@ import {
   createValidationErrorResponse,
   createInternalErrorResponse,
 } from "@/lib/error-handler";
+import { createAuditLog, AUDIT_ACTIONS } from "@/lib/audit";
+import { createAndNotify } from "@/lib/notifications";
 
 export async function GET(
   req: Request,
@@ -38,8 +40,11 @@ export async function GET(
     // Check if user has permission to view tasks
     if (!membership.isAdmin && !membership.canViewTasks) {
       return NextResponse.json(
-        { error: 'Forbidden', message: 'You do not have permission to view tasks' },
-        { status: 403 }
+        {
+          error: "Forbidden",
+          message: "You do not have permission to view tasks",
+        },
+        { status: 403 },
       );
     }
 
@@ -69,9 +74,12 @@ export async function GET(
     // Check if user has permission to view tasks
     if (!authResult.membership.isAdmin && !authResult.membership.canViewTasks) {
       return NextResponse.json(
-        { error: 'Forbidden', message: 'You do not have permission to view tasks' },
-        { status: 403 }
-      )
+        {
+          error: "Forbidden",
+          message: "You do not have permission to view tasks",
+        },
+        { status: 403 },
+      );
     }
 
     // Get all tasks for this team
@@ -143,7 +151,11 @@ export async function POST(
     const { user, membership } = authResult;
 
     // Check if user has permission to create tasks
-    const permissionError = requirePermission(membership, 'canCreateTasks', 'create tasks');
+    const permissionError = requirePermission(
+      membership,
+      "canCreateTasks",
+      "create tasks",
+    );
     if (permissionError) {
       return permissionError.response;
     }
@@ -230,7 +242,14 @@ export async function POST(
         assignedToId: assignedToId || null,
         priority: (priority as TaskPriority) || "MEDIUM",
         status: (status as TaskStatus) || "TODO",
-        ...(type !== undefined && { type: type as "MEDICATION" | "APPOINTMENTS" | "SOCIAL" | "HEALTH_PERSONAL" | null }),
+        ...(type !== undefined && {
+          type: type as
+            | "MEDICATION"
+            | "APPOINTMENTS"
+            | "SOCIAL"
+            | "HEALTH_PERSONAL"
+            | null,
+        }),
         isPersonal: isPersonal || false,
         dueDate: dueDate ? new Date(dueDate) : null,
       },
@@ -257,6 +276,27 @@ export async function POST(
         },
       },
     });
+
+    await createAuditLog({
+      teamId,
+      actorId: user.id,
+      action: AUDIT_ACTIONS.TASK_CREATED,
+      entityType: "Task",
+      entityId: task.id,
+      metadata: { name: task.name, status: task.status },
+    });
+
+    if (task.assignedTo?.id && task.assignedTo.id !== user.id) {
+      await createAndNotify({
+        teamId,
+        userId: task.assignedTo.id,
+        type: "TASK_DUE",
+        title: "New task assigned",
+        message: `"${task.name}" was assigned to you.`,
+        linkUrl: "/dashboard/tasks",
+        linkLabel: "View tasks",
+      }).catch(() => {});
+    }
 
     const response = NextResponse.json({ task }, { status: 201 });
     addRateLimitHeaders(

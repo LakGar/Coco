@@ -1,5 +1,8 @@
 // This is your Prisma schema file,
 // learn more about it in the docs: https://pris.ly/d/prisma-schema
+//
+// For CLI (db push, migrate, studio): use npm scripts so .env.local is loaded:
+//   npm run db:push   npm run db:migrate   npm run db:studio
 
 generator client {
   provider = "prisma-client-js"
@@ -12,7 +15,7 @@ datasource db {
 
 enum UserRole {
   CAREGIVER
-  FAMILY
+  FAMILY  
   PHYSICIAN
   PATIENT
 }
@@ -139,12 +142,19 @@ model User {
 
   // notifications for this user
   notifications Notification[] @relation("Notifications")
+  auditLogs     AuditLog[]     @relation("AuditLogActor")
 
   // caregiver burden scales completed by this user
   caregiverBurdenScales CaregiverBurdenScale[] @relation("CaregiverBurdenScales")
 
   // notification preferences
   notificationSettings UserNotificationSettings?
+
+  // Patient Journey
+  createdPatientJourneys   PatientJourney[]     @relation("JourneyCreatedBy")
+  updatedJourneySections   JourneySection[]    @relation("JourneySectionUpdatedBy")
+  editedJourneyRevisions  JourneySectionRevision[] @relation("JourneyRevisionEditedBy")
+  journeyEntries          JourneyEntry[]       @relation("JourneyEntryAuthor")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -166,7 +176,9 @@ model CareTeam {
   notes                 Note[]
   contacts              Contact[]
   notifications         Notification[]
+  auditLogs             AuditLog[]
   caregiverBurdenScales CaregiverBurdenScale[]
+  patientJourney        PatientJourney?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -496,6 +508,24 @@ model Notification {
   @@index([createdAt])
 }
 
+// Audit trail - who did what and when (per team)
+model AuditLog {
+  id        String   @id @default(cuid())
+  teamId    String
+  team      CareTeam @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  actorId   String   // User who performed the action
+  actor     User     @relation("AuditLogActor", fields: [actorId], references: [id], onDelete: Cascade)
+  action    String   // e.g. TASK_CREATED, TASK_UPDATED, TASK_DELETED, MEMBER_ADDED, MEMBER_REMOVED, PERMISSION_CHANGED, INVITE_SENT, TEAM_DELETED
+  entityType String? // Task, CareTeamMember, Invite, etc.
+  entityId  String?
+  metadata  Json?    // Extra context (task name, member name, etc.)
+  createdAt DateTime @default(now())
+
+  @@index([teamId])
+  @@index([actorId])
+  @@index([createdAt])
+}
+
 // Caregiver Burden Scale - Zarit Burden Interview (ZBI) questionnaire
 model CaregiverBurdenScale {
   id     String   @id @default(cuid())
@@ -554,4 +584,100 @@ model UserNotificationSettings {
   updatedAt DateTime @updatedAt
 
   @@index([userId])
+}
+
+// --- Patient Journey (Admin + Physician only) ---
+enum JourneyEntryType {
+  UPDATE
+  MILESTONE
+  MED_CHANGE
+  APPOINTMENT
+  BEHAVIOR
+  SAFETY
+  MOOD_EVENT
+  ROUTINE_EVENT
+  TASK_EVENT
+  BURDEN_EVENT
+  NOTE_EVENT
+}
+
+model PatientJourney {
+  id                  String   @id @default(cuid())
+  teamId              String   @unique
+  team                CareTeam @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  title               String   @default("Patient Journey")
+  patientDisplayName  String?
+  createdById         String
+  createdBy           User     @relation("JourneyCreatedBy", fields: [createdById], references: [id], onDelete: Cascade)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  sections JourneySection[]
+  entries  JourneyEntry[]
+  snapshots JourneySnapshot[]
+
+  @@index([teamId])
+}
+
+model JourneySection {
+  id          String   @id @default(cuid())
+  journeyId   String
+  journey     PatientJourney @relation(fields: [journeyId], references: [id], onDelete: Cascade)
+  key         String   // e.g. BASICS, SAFETY, TRIGGERS, BASELINE, PROVIDERS, GOALS, MEDICATIONS
+  title       String
+  content     Json     // structured
+  updatedById String
+  updatedBy   User     @relation("JourneySectionUpdatedBy", fields: [updatedById], references: [id], onDelete: Cascade)
+  updatedAt   DateTime @updatedAt
+  version     Int      @default(1)
+
+  revisions JourneySectionRevision[]
+
+  @@unique([journeyId, key])
+  @@index([journeyId])
+}
+
+model JourneySectionRevision {
+  id             String   @id @default(cuid())
+  sectionId      String
+  section        JourneySection @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  previousContent Json
+  newContent     Json
+  editedById     String
+  editedBy       User     @relation("JourneyRevisionEditedBy", fields: [editedById], references: [id], onDelete: Cascade)
+  editedAt      DateTime @default(now())
+
+  @@index([sectionId])
+}
+
+model JourneyEntry {
+  id              String          @id @default(cuid())
+  journeyId       String
+  journey         PatientJourney  @relation(fields: [journeyId], references: [id], onDelete: Cascade)
+  type            JourneyEntryType
+  title           String
+  content         Json            // String or structured
+  authorId        String?         // null for system entries
+  author          User?           @relation("JourneyEntryAuthor", fields: [authorId], references: [id], onDelete: SetNull)
+  linkedEntityType String?
+  linkedEntityId  String?
+  occurredAt      DateTime
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([journeyId])
+  @@index([occurredAt])
+  @@index([type])
+}
+
+model JourneySnapshot {
+  id         String   @id @default(cuid())
+  journeyId  String
+  journey    PatientJourney @relation(fields: [journeyId], references: [id], onDelete: Cascade)
+  computedAt DateTime @default(now())
+  rangeDays  Int      // 7 or 30
+  data       Json     // chart-ready series, totals, highlights
+
+  @@unique([journeyId, rangeDays])
+  @@index([journeyId])
 }

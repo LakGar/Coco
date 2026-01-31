@@ -16,6 +16,7 @@ import {
   formatZodError,
 } from "@/lib/validations";
 import { sendInviteEmail } from "@/lib/email";
+import { createAuditLog, AUDIT_ACTIONS } from "@/lib/audit";
 import { TeamRole, AccessLevel } from "@prisma/client";
 import { randomBytes } from "crypto";
 import { getDefaultPermissionsForAccessLevel } from "@/lib/permission-helpers";
@@ -410,10 +411,18 @@ export async function POST(
       invitedName: name,
     });
 
-    // Log email result but don't fail the request if email fails
     if (!emailResult.success) {
       console.warn("Failed to send invite email:", emailResult.error);
     }
+
+    await createAuditLog({
+      teamId,
+      actorId: user.id,
+      action: AUDIT_ACTIONS.INVITE_SENT,
+      entityType: "Invite",
+      entityId: teamMember.id,
+      metadata: { email, name, teamRole },
+    });
 
     const response = NextResponse.json({
       success: true,

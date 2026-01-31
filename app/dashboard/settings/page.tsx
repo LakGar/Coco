@@ -1,44 +1,71 @@
-"use client"
+"use client";
 
-import * as React from "react"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { Label } from "@/components/ui/label"
-import { Spinner } from "@/components/ui/spinner"
+import * as React from "react";
+import { useRouter } from "next/navigation";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
+import { Spinner } from "@/components/ui/spinner";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select"
-import { Switch } from "@/components/ui/switch"
-import { Input } from "@/components/ui/input"
-import { Separator } from "@/components/ui/separator"
-import { toast } from "sonner"
-import { Settings, Bell, Mail, Smartphone, Save, Clock } from "lucide-react"
+} from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
+import { Input } from "@/components/ui/input";
+import { Separator } from "@/components/ui/separator";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { toast } from "sonner";
+import {
+  Settings,
+  Bell,
+  Mail,
+  Smartphone,
+  Save,
+  Clock,
+  Trash2,
+  LogOut,
+  AlertTriangle,
+} from "lucide-react";
+import { useTeamStore } from "@/store/use-team-store";
+import { useDataStore } from "@/store/use-data-store";
 
-type NotificationFrequency = "EVERY_EVENT" | "DAILY" | "WEEKLY" | "DISABLED"
+type NotificationFrequency = "EVERY_EVENT" | "DAILY" | "WEEKLY" | "DISABLED";
 
 interface NotificationSettings {
-  contactSetupReminderFrequency: NotificationFrequency
-  taskDueFrequency: NotificationFrequency
-  routineMissedFrequency: NotificationFrequency
-  teamInviteFrequency: NotificationFrequency
-  permissionChangeFrequency: NotificationFrequency
-  systemAlertFrequency: NotificationFrequency
-  emailNotificationsEnabled: boolean
-  pushNotificationsEnabled: boolean
-  dailyDigestTime: string | null
-  weeklyDigestDay: number | null
-  weeklyDigestTime: string | null
+  contactSetupReminderFrequency: NotificationFrequency;
+  taskDueFrequency: NotificationFrequency;
+  routineMissedFrequency: NotificationFrequency;
+  teamInviteFrequency: NotificationFrequency;
+  permissionChangeFrequency: NotificationFrequency;
+  systemAlertFrequency: NotificationFrequency;
+  emailNotificationsEnabled: boolean;
+  pushNotificationsEnabled: boolean;
+  dailyDigestTime: string | null;
+  weeklyDigestDay: number | null;
+  weeklyDigestTime: string | null;
 }
 
 interface NotificationTypeConfig {
-  key: keyof NotificationSettings
-  label: string
-  description: string
-  icon?: React.ComponentType<{ className?: string }>
+  key: keyof NotificationSettings;
+  label: string;
+  description: string;
+  icon?: React.ComponentType<{ className?: string }>;
 }
 
 const NOTIFICATION_TYPES: NotificationTypeConfig[] = [
@@ -72,7 +99,7 @@ const NOTIFICATION_TYPES: NotificationTypeConfig[] = [
     label: "System Alerts",
     description: "Get notified about important system updates and alerts",
   },
-]
+];
 
 const DAYS_OF_WEEK = [
   { value: 0, label: "Sunday" },
@@ -82,72 +109,111 @@ const DAYS_OF_WEEK = [
   { value: 4, label: "Thursday" },
   { value: 5, label: "Friday" },
   { value: 6, label: "Saturday" },
-]
+];
 
 export default function SettingsPage() {
-  const [loading, setLoading] = React.useState(true)
-  const [saving, setSaving] = React.useState(false)
-  const [settings, setSettings] = React.useState<NotificationSettings | null>(null)
+  const router = useRouter();
+  const { activeTeam, loadTeams } = useTeamStore();
+  const { teamData: teamDataFromStore, fetchTeamData } = useDataStore();
+  const [loading, setLoading] = React.useState(true);
+  const [saving, setSaving] = React.useState(false);
+  const [settings, setSettings] = React.useState<NotificationSettings | null>(
+    null,
+  );
+  const [leaveDialogOpen, setLeaveDialogOpen] = React.useState(false);
+  const [deleteTeamDialogOpen, setDeleteTeamDialogOpen] = React.useState(false);
+  const [assignAdminUserId, setAssignAdminUserId] = React.useState<string>("");
+  const [leaving, setLeaving] = React.useState(false);
+  const [deletingTeam, setDeletingTeam] = React.useState(false);
+  const [makingAdmin, setMakingAdmin] = React.useState(false);
+  const [leaveErrorCode, setLeaveErrorCode] = React.useState<string | null>(
+    null,
+  );
+
+  const teamData = activeTeam
+    ? (teamDataFromStore[activeTeam.id] ?? null)
+    : null;
+  const isOnlyAdmin =
+    teamData?.currentUser.isAdmin &&
+    teamData?.members.filter((m) => m.isAdmin).length <= 1;
+  const otherNonAdminMembers = (teamData?.members ?? []).filter(
+    (m) => m.id !== teamData?.currentUser.id && !m.isAdmin,
+  );
 
   React.useEffect(() => {
-    fetchSettings()
-  }, [])
+    fetchSettings();
+  }, []);
+
+  React.useEffect(() => {
+    if (activeTeam?.id) {
+      fetchTeamData(activeTeam.id);
+    }
+  }, [activeTeam?.id, fetchTeamData]);
 
   const fetchSettings = async () => {
-    setLoading(true)
+    setLoading(true);
     try {
-      const response = await fetch("/api/user/notification-settings")
+      const response = await fetch("/api/user/notification-settings");
       if (!response.ok) {
-        throw new Error("Failed to load settings")
+        throw new Error("Failed to load settings");
       }
-      const data = await response.json()
-      setSettings(data.settings)
+      const data = await response.json();
+      setSettings(data.settings);
     } catch (error) {
       if (process.env.NODE_ENV === "development") {
-        console.error("Error fetching settings:", error)
+        console.error("Error fetching settings:", error);
       }
-      toast.error("Failed to load settings")
+      toast.error("Failed to load settings");
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }
+  };
 
-  const handleFrequencyChange = (key: keyof NotificationSettings, value: NotificationFrequency) => {
-    if (!settings) return
+  const handleFrequencyChange = (
+    key: keyof NotificationSettings,
+    value: NotificationFrequency,
+  ) => {
+    if (!settings) return;
     setSettings({
       ...settings,
       [key]: value,
-    })
-  }
+    });
+  };
 
-  const handleToggleChange = (key: "emailNotificationsEnabled" | "pushNotificationsEnabled", value: boolean) => {
-    if (!settings) return
+  const handleToggleChange = (
+    key: "emailNotificationsEnabled" | "pushNotificationsEnabled",
+    value: boolean,
+  ) => {
+    if (!settings) return;
     setSettings({
       ...settings,
       [key]: value,
-    })
-  }
+    });
+  };
 
-  const handleTimeChange = (key: "dailyDigestTime" | "weeklyDigestTime", value: string) => {
-    if (!settings) return
+  const handleTimeChange = (
+    key: "dailyDigestTime" | "weeklyDigestTime",
+    value: string,
+  ) => {
+    if (!settings) return;
     setSettings({
       ...settings,
       [key]: value || null,
-    })
-  }
+    });
+  };
 
   const handleWeeklyDayChange = (value: string) => {
-    if (!settings) return
+    if (!settings) return;
     setSettings({
       ...settings,
       weeklyDigestDay: value ? parseInt(value, 10) : null,
-    })
-  }
+    });
+  };
 
   const handleSave = async () => {
-    if (!settings) return
+    if (!settings) return;
 
-    setSaving(true)
+    setSaving(true);
     try {
       const response = await fetch("/api/user/notification-settings", {
         method: "PATCH",
@@ -155,20 +221,106 @@ export default function SettingsPage() {
           "Content-Type": "application/json",
         },
         body: JSON.stringify(settings),
-      })
+      });
 
       if (!response.ok) {
-        const error = await response.json()
-        throw new Error(error.error || "Failed to save settings")
+        const error = await response.json();
+        throw new Error(error.error || "Failed to save settings");
       }
 
-      toast.success("Settings saved successfully")
+      toast.success("Settings saved successfully");
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Failed to save settings")
+      toast.error(
+        error instanceof Error ? error.message : "Failed to save settings",
+      );
     } finally {
-      setSaving(false)
+      setSaving(false);
     }
-  }
+  };
+
+  const handleLeaveTeam = async () => {
+    if (!activeTeam) return;
+    setLeaving(true);
+    setLeaveErrorCode(null);
+    try {
+      const response = await fetch(`/api/teams/${activeTeam.id}/leave`, {
+        method: "POST",
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        if (data.code === "ONLY_ADMIN_CANNOT_LEAVE") {
+          setLeaveErrorCode("ONLY_ADMIN_CANNOT_LEAVE");
+          setLeaveDialogOpen(false);
+          toast.error("Assign another admin before you can leave the team.");
+          return;
+        }
+        throw new Error(data.error || "Failed to leave team");
+      }
+      toast.success("You have left the team.");
+      setLeaveDialogOpen(false);
+      await loadTeams();
+      router.push("/dashboard");
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Failed to leave team",
+      );
+    } finally {
+      setLeaving(false);
+    }
+  };
+
+  const handleMakeAdmin = async () => {
+    if (!activeTeam || !assignAdminUserId) return;
+    setMakingAdmin(true);
+    try {
+      const response = await fetch(
+        `/api/teams/${activeTeam.id}/members/${assignAdminUserId}`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ isAdmin: true }),
+        },
+      );
+      if (!response.ok) {
+        const err = await response.json();
+        throw new Error(err.error || "Failed to update member");
+      }
+      toast.success("Admin assigned. You can now leave the team if you want.");
+      setAssignAdminUserId("");
+      setLeaveErrorCode(null);
+      await fetchTeamData(activeTeam.id, true);
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Failed to assign admin",
+      );
+    } finally {
+      setMakingAdmin(false);
+    }
+  };
+
+  const handleDeleteTeam = async () => {
+    if (!activeTeam) return;
+    setDeletingTeam(true);
+    try {
+      const response = await fetch(`/api/teams/${activeTeam.id}`, {
+        method: "DELETE",
+      });
+      if (!response.ok) {
+        const err = await response.json();
+        throw new Error(err.error || "Failed to delete team");
+      }
+      toast.success("Team and all its data have been deleted.");
+      setDeleteTeamDialogOpen(false);
+      await loadTeams();
+      router.push("/dashboard");
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Failed to delete team",
+      );
+    } finally {
+      setDeletingTeam(false);
+    }
+  };
 
   if (loading) {
     return (
@@ -178,7 +330,7 @@ export default function SettingsPage() {
           <p className="text-muted-foreground">Loading settings...</p>
         </div>
       </div>
-    )
+    );
   }
 
   if (!settings) {
@@ -192,7 +344,7 @@ export default function SettingsPage() {
           </p>
         </Card>
       </div>
-    )
+    );
   }
 
   return (
@@ -231,30 +383,40 @@ export default function SettingsPage() {
                 <CardTitle>Notification Preferences</CardTitle>
               </div>
               <CardDescription>
-                Control how and when you receive notifications for different events
+                Control how and when you receive notifications for different
+                events
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
               {NOTIFICATION_TYPES.map((type) => {
-                const value = settings[type.key] as NotificationFrequency
+                const value = settings[type.key] as NotificationFrequency;
                 return (
                   <div key={type.key} className="space-y-2">
                     <div className="flex items-center justify-between">
                       <div>
-                        <Label className="text-base font-medium">{type.label}</Label>
-                        <p className="text-sm text-muted-foreground mt-1">{type.description}</p>
+                        <Label className="text-base font-medium">
+                          {type.label}
+                        </Label>
+                        <p className="text-sm text-muted-foreground mt-1">
+                          {type.description}
+                        </p>
                       </div>
                       <Select
                         value={value}
                         onValueChange={(val) =>
-                          handleFrequencyChange(type.key, val as NotificationFrequency)
+                          handleFrequencyChange(
+                            type.key,
+                            val as NotificationFrequency,
+                          )
                         }
                       >
                         <SelectTrigger className="w-[180px]">
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="EVERY_EVENT">Every Event</SelectItem>
+                          <SelectItem value="EVERY_EVENT">
+                            Every Event
+                          </SelectItem>
                           <SelectItem value="DAILY">Daily Digest</SelectItem>
                           <SelectItem value="WEEKLY">Weekly Digest</SelectItem>
                           <SelectItem value="DISABLED">Disabled</SelectItem>
@@ -263,7 +425,10 @@ export default function SettingsPage() {
                     </div>
                     {value === "DAILY" && type.key === "taskDueFrequency" && (
                       <div className="ml-4 pl-4 border-l-2 space-y-2">
-                        <Label htmlFor="dailyDigestTime" className="text-sm flex items-center gap-2">
+                        <Label
+                          htmlFor="dailyDigestTime"
+                          className="text-sm flex items-center gap-2"
+                        >
                           <Clock className="h-4 w-4" />
                           Daily Digest Time (UTC)
                         </Label>
@@ -271,7 +436,9 @@ export default function SettingsPage() {
                           id="dailyDigestTime"
                           type="time"
                           value={settings.dailyDigestTime || "09:00"}
-                          onChange={(e) => handleTimeChange("dailyDigestTime", e.target.value)}
+                          onChange={(e) =>
+                            handleTimeChange("dailyDigestTime", e.target.value)
+                          }
                           className="w-[180px]"
                         />
                         <p className="text-xs text-muted-foreground">
@@ -283,12 +450,17 @@ export default function SettingsPage() {
                       <div className="ml-4 pl-4 border-l-2 space-y-2">
                         <div className="flex gap-4">
                           <div className="space-y-2">
-                            <Label htmlFor="weeklyDigestDay" className="text-sm flex items-center gap-2">
+                            <Label
+                              htmlFor="weeklyDigestDay"
+                              className="text-sm flex items-center gap-2"
+                            >
                               <Clock className="h-4 w-4" />
                               Day of Week
                             </Label>
                             <Select
-                              value={settings.weeklyDigestDay?.toString() || "1"}
+                              value={
+                                settings.weeklyDigestDay?.toString() || "1"
+                              }
                               onValueChange={handleWeeklyDayChange}
                             >
                               <SelectTrigger className="w-[180px]">
@@ -296,7 +468,10 @@ export default function SettingsPage() {
                               </SelectTrigger>
                               <SelectContent>
                                 {DAYS_OF_WEEK.map((day) => (
-                                  <SelectItem key={day.value} value={day.value.toString()}>
+                                  <SelectItem
+                                    key={day.value}
+                                    value={day.value.toString()}
+                                  >
                                     {day.label}
                                   </SelectItem>
                                 ))}
@@ -304,7 +479,10 @@ export default function SettingsPage() {
                             </Select>
                           </div>
                           <div className="space-y-2">
-                            <Label htmlFor="weeklyDigestTime" className="text-sm flex items-center gap-2">
+                            <Label
+                              htmlFor="weeklyDigestTime"
+                              className="text-sm flex items-center gap-2"
+                            >
                               <Clock className="h-4 w-4" />
                               Time (UTC)
                             </Label>
@@ -312,7 +490,12 @@ export default function SettingsPage() {
                               id="weeklyDigestTime"
                               type="time"
                               value={settings.weeklyDigestTime || "09:00"}
-                              onChange={(e) => handleTimeChange("weeklyDigestTime", e.target.value)}
+                              onChange={(e) =>
+                                handleTimeChange(
+                                  "weeklyDigestTime",
+                                  e.target.value,
+                                )
+                              }
                               className="w-[180px]"
                             />
                           </div>
@@ -323,7 +506,7 @@ export default function SettingsPage() {
                       </div>
                     )}
                   </div>
-                )
+                );
               })}
             </CardContent>
           </Card>
@@ -344,7 +527,10 @@ export default function SettingsPage() {
             <CardContent className="space-y-4">
               <div className="flex items-center justify-between p-4 rounded-lg border">
                 <div className="space-y-0.5">
-                  <Label htmlFor="emailNotifications" className="text-base font-medium flex items-center gap-2">
+                  <Label
+                    htmlFor="emailNotifications"
+                    className="text-base font-medium flex items-center gap-2"
+                  >
                     <Mail className="h-4 w-4" />
                     Email Notifications
                   </Label>
@@ -355,13 +541,18 @@ export default function SettingsPage() {
                 <Switch
                   id="emailNotifications"
                   checked={settings.emailNotificationsEnabled}
-                  onCheckedChange={(checked) => handleToggleChange("emailNotificationsEnabled", checked)}
+                  onCheckedChange={(checked) =>
+                    handleToggleChange("emailNotificationsEnabled", checked)
+                  }
                 />
               </div>
 
               <div className="flex items-center justify-between p-4 rounded-lg border">
                 <div className="space-y-0.5">
-                  <Label htmlFor="pushNotifications" className="text-base font-medium flex items-center gap-2">
+                  <Label
+                    htmlFor="pushNotifications"
+                    className="text-base font-medium flex items-center gap-2"
+                  >
                     <Smartphone className="h-4 w-4" />
                     Push Notifications
                   </Label>
@@ -372,14 +563,181 @@ export default function SettingsPage() {
                 <Switch
                   id="pushNotifications"
                   checked={settings.pushNotificationsEnabled}
-                  onCheckedChange={(checked) => handleToggleChange("pushNotificationsEnabled", checked)}
+                  onCheckedChange={(checked) =>
+                    handleToggleChange("pushNotificationsEnabled", checked)
+                  }
                   disabled
                 />
               </div>
             </CardContent>
           </Card>
+
+          {activeTeam && (
+            <>
+              <Separator />
+              <Card className="border-destructive/30">
+                <CardHeader>
+                  <div className="flex items-center gap-2">
+                    <AlertTriangle className="h-5 w-5 text-destructive" />
+                    <CardTitle>Data & account</CardTitle>
+                  </div>
+                  <CardDescription>
+                    Leave the current team or delete the entire team and all its
+                    data. These actions cannot be undone.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                  {leaveErrorCode === "ONLY_ADMIN_CANNOT_LEAVE" && (
+                    <div className="rounded-lg border border-amber-500/50 bg-amber-500/10 p-4 space-y-3">
+                      <p className="text-sm font-medium text-amber-800 dark:text-amber-200">
+                        You are the only admin. Assign another admin before you
+                        can leave the team.
+                      </p>
+                      <div className="flex flex-wrap items-end gap-3">
+                        <div className="space-y-2 min-w-[200px]">
+                          <Label>Assign admin to</Label>
+                          <Select
+                            value={assignAdminUserId}
+                            onValueChange={setAssignAdminUserId}
+                          >
+                            <SelectTrigger>
+                              <SelectValue placeholder="Choose a member" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {otherNonAdminMembers.map((m) => (
+                                <SelectItem key={m.id} value={m.id}>
+                                  {m.name || m.email}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <Button
+                          variant="default"
+                          onClick={handleMakeAdmin}
+                          disabled={!assignAdminUserId || makingAdmin}
+                        >
+                          {makingAdmin ? (
+                            <>
+                              <Spinner className="mr-2 h-4 w-4" />
+                              Assigning...
+                            </>
+                          ) : (
+                            "Make admin"
+                          )}
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="flex flex-wrap items-center gap-3">
+                    <Button
+                      variant="outline"
+                      onClick={() => setLeaveDialogOpen(true)}
+                      disabled={
+                        isOnlyAdmin && otherNonAdminMembers.length === 0
+                      }
+                    >
+                      <LogOut className="mr-2 h-4 w-4" />
+                      Leave team
+                    </Button>
+                    {teamData?.currentUser.isAdmin && (
+                      <Button
+                        variant="destructive"
+                        onClick={() => setDeleteTeamDialogOpen(true)}
+                        disabled={deletingTeam}
+                      >
+                        <Trash2 className="mr-2 h-4 w-4" />
+                        Delete entire team
+                      </Button>
+                    )}
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Current team:{" "}
+                    <span className="font-medium">{activeTeam.name}</span>
+                  </p>
+                </CardContent>
+              </Card>
+            </>
+          )}
+
+          {/* Leave team confirmation */}
+          <Dialog open={leaveDialogOpen} onOpenChange={setLeaveDialogOpen}>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Leave team?</DialogTitle>
+                <DialogDescription>
+                  You will lose access to this team and its data. You can be
+                  re-invited later. This cannot be undone for your membership.
+                </DialogDescription>
+              </DialogHeader>
+              <DialogFooter>
+                <Button
+                  variant="outline"
+                  onClick={() => setLeaveDialogOpen(false)}
+                  disabled={leaving}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  variant="destructive"
+                  onClick={handleLeaveTeam}
+                  disabled={leaving}
+                >
+                  {leaving ? (
+                    <>
+                      <Spinner className="mr-2 h-4 w-4" />
+                      Leaving...
+                    </>
+                  ) : (
+                    "Leave team"
+                  )}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+
+          {/* Delete team confirmation */}
+          <Dialog
+            open={deleteTeamDialogOpen}
+            onOpenChange={setDeleteTeamDialogOpen}
+          >
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Delete entire team?</DialogTitle>
+                <DialogDescription>
+                  This will permanently delete the team &quot;{activeTeam?.name}
+                  &quot; and all its data: tasks, routines, notes, contacts,
+                  moods, and members. This cannot be undone.
+                </DialogDescription>
+              </DialogHeader>
+              <DialogFooter>
+                <Button
+                  variant="outline"
+                  onClick={() => setDeleteTeamDialogOpen(false)}
+                  disabled={deletingTeam}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  variant="destructive"
+                  onClick={handleDeleteTeam}
+                  disabled={deletingTeam}
+                >
+                  {deletingTeam ? (
+                    <>
+                      <Spinner className="mr-2 h-4 w-4" />
+                      Deleting...
+                    </>
+                  ) : (
+                    "Delete team"
+                  )}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
         </div>
       </div>
     </div>
-  )
+  );
 }

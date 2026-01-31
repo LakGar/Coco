@@ -86,6 +86,9 @@ export default function TasksPage() {
   const [priorityFilter, setPriorityFilter] = React.useState<string>("all");
   const [typeFilter, setTypeFilter] = React.useState<string>("all"); // all, MEDICATION, APPOINTMENTS, SOCIAL, HEALTH_PERSONAL
   const [dueDateFilter, setDueDateFilter] = React.useState<string>("all"); // all, overdue, today, thisWeek, upcoming
+  const [personalOrPatientFilter, setPersonalOrPatientFilter] = React.useState<
+    "all" | "personal" | "patient"
+  >("all");
   const [filterModalOpen, setFilterModalOpen] = React.useState(false);
 
   // View mode: "kanban" | "list" | "timeline"
@@ -355,10 +358,12 @@ export default function TasksPage() {
     dueDateFilter,
   ]);
 
-  // Combined filtered tasks for display (personal tasks shown separately)
+  // Combined filtered tasks for display (respects personal/patient filter)
   const filteredTasks = React.useMemo(() => {
+    if (personalOrPatientFilter === "patient") return filteredPatientTasks;
+    if (personalOrPatientFilter === "personal") return filteredPersonalTasks;
     return [...filteredPatientTasks, ...filteredPersonalTasks];
-  }, [filteredPatientTasks, filteredPersonalTasks]);
+  }, [personalOrPatientFilter, filteredPatientTasks, filteredPersonalTasks]);
 
   const handleCreateTask = () => {
     if (!canCreateTasks) {
@@ -819,7 +824,8 @@ export default function TasksPage() {
                   statusFilter !== "all" ||
                   priorityFilter !== "all" ||
                   typeFilter !== "all" ||
-                  dueDateFilter !== "all"
+                  dueDateFilter !== "all" ||
+                  personalOrPatientFilter !== "all"
                     ? ` (filtered from ${tasks.length})`
                     : ""}
                 </p>
@@ -908,7 +914,7 @@ export default function TasksPage() {
             </div>
 
             {/* Search and Filters */}
-            <div className="flex items-center gap-3 w-full">
+            <div className="flex items-center gap-3 w-full flex-wrap">
               <div className="relative flex-1 min-w-0">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
                 <Input
@@ -920,7 +926,8 @@ export default function TasksPage() {
                 {(statusFilter !== "all" ||
                   priorityFilter !== "all" ||
                   typeFilter !== "all" ||
-                  dueDateFilter !== "all") && (
+                  dueDateFilter !== "all" ||
+                  personalOrPatientFilter !== "all") && (
                   <Button
                     variant="ghost"
                     size="icon"
@@ -930,11 +937,33 @@ export default function TasksPage() {
                       setPriorityFilter("all");
                       setTypeFilter("all");
                       setDueDateFilter("all");
+                      setPersonalOrPatientFilter("all");
                     }}
                   >
                     <X className="h-4 w-4" />
                   </Button>
                 )}
+              </div>
+              <div className="flex items-center rounded-lg border p-0.5 bg-muted/30 shrink-0">
+                {(
+                  [
+                    { value: "all" as const, label: "All" },
+                    { value: "patient" as const, label: "Patient" },
+                    { value: "personal" as const, label: "Personal" },
+                  ] as const
+                ).map(({ value, label }) => (
+                  <Button
+                    key={value}
+                    variant={
+                      personalOrPatientFilter === value ? "secondary" : "ghost"
+                    }
+                    size="sm"
+                    className="h-9 px-3 rounded-md font-medium"
+                    onClick={() => setPersonalOrPatientFilter(value)}
+                  >
+                    {label}
+                  </Button>
+                ))}
               </div>
               <Button
                 variant="outline"
@@ -947,7 +976,8 @@ export default function TasksPage() {
                 {(statusFilter !== "all" ||
                   priorityFilter !== "all" ||
                   typeFilter !== "all" ||
-                  dueDateFilter !== "all") && (
+                  dueDateFilter !== "all" ||
+                  personalOrPatientFilter !== "all") && (
                   <span className="ml-2 h-5 w-5 rounded-full bg-primary text-primary-foreground text-xs flex items-center justify-center">
                     {
                       [
@@ -955,6 +985,7 @@ export default function TasksPage() {
                         priorityFilter,
                         typeFilter,
                         dueDateFilter,
+                        personalOrPatientFilter,
                       ].filter((f) => f !== "all").length
                     }
                   </span>
@@ -1244,280 +1275,6 @@ export default function TasksPage() {
           ) : viewMode === "list" ? (
             <div className="h-full overflow-auto w-full p-4">
               <div className="space-y-6 mx-auto">
-                {/* Patient Tasks Section */}
-                {filteredPatientTasks.length > 0 && (
-                  <div className="space-y-4">
-                    <div className="flex items-center gap-2">
-                      <User className="h-5 w-5 text-muted-foreground" />
-                      <h2 className="text-lg font-semibold">
-                        {activeTeam?.patientName || "Patient"} Tasks
-                      </h2>
-                      <Badge variant="secondary" className="ml-2">
-                        {filteredPatientTasks.length}
-                      </Badge>
-                    </div>
-                    <div className="space-y-2">
-                      {filteredPatientTasks.map((task, taskIndex) => (
-                        <motion.div
-                          key={task.id}
-                          initial={
-                            shouldAnimate ? { opacity: 0, y: 10 } : false
-                          }
-                          animate={shouldAnimate ? { opacity: 1, y: 0 } : {}}
-                          transition={{
-                            duration: 0.3,
-                            delay: taskIndex * 0.05,
-                          }}
-                        >
-                          <Card
-                            className="group hover:shadow-md transition-all cursor-pointer"
-                            onClick={() => handleEditTask(task)}
-                          >
-                            <CardContent className="p-4">
-                              <div className="flex items-start justify-between gap-4">
-                                <div className="flex-1 min-w-0">
-                                  <div className="flex items-center gap-2 mb-2 flex-wrap">
-                                    {task.type &&
-                                      (() => {
-                                        const TypeIcon = getTaskTypeIcon(
-                                          task.type,
-                                        );
-                                        const typeColor = getTaskTypeColor(
-                                          task.type,
-                                        );
-                                        return TypeIcon ? (
-                                          <TypeIcon
-                                            className={`h-4 w-4 ${typeColor}`}
-                                          />
-                                        ) : null;
-                                      })()}
-                                    <h3 className="font-semibold text-sm">
-                                      {task.name}
-                                    </h3>
-                                    {task.patientName && (
-                                      <Badge
-                                        variant="outline"
-                                        className="text-xs"
-                                      >
-                                        <User className="h-3 w-3 mr-1" />
-                                        {task.patientName}
-                                      </Badge>
-                                    )}
-                                    <Badge
-                                      variant="outline"
-                                      className={`text-xs ${getPriorityColor(task.priority)}`}
-                                    >
-                                      <span
-                                        className={`h-1.5 w-1.5 rounded-full mr-1.5 ${getPriorityDot(task.priority)}`}
-                                      />
-                                      {task.priority}
-                                    </Badge>
-                                  </div>
-                                  {task.description && (
-                                    <p className="text-xs text-muted-foreground mb-2 line-clamp-2">
-                                      {task.description}
-                                    </p>
-                                  )}
-                                  <div className="flex items-center gap-4 text-xs text-muted-foreground">
-                                    {task.dueDate && (
-                                      <div className="flex items-center gap-1">
-                                        <Calendar className="h-3 w-3" />
-                                        {new Date(
-                                          task.dueDate,
-                                        ).toLocaleDateString("en-US", {
-                                          month: "short",
-                                          day: "numeric",
-                                          year: "numeric",
-                                        })}
-                                      </div>
-                                    )}
-                                    <Badge
-                                      variant="outline"
-                                      className="text-xs"
-                                    >
-                                      {task.status}
-                                    </Badge>
-                                  </div>
-                                </div>
-                                <div className="flex items-center gap-2 shrink-0">
-                                  {canCreateTasks && !task.isPersonal && (
-                                    <Button
-                                      variant="ghost"
-                                      size="sm"
-                                      className="opacity-0 group-hover:opacity-100 transition-opacity"
-                                      onClick={async (e) => {
-                                        e.stopPropagation();
-                                        try {
-                                          const response = await fetch(
-                                            `/api/teams/${activeTeam?.id}/tasks/${task.id}`,
-                                            {
-                                              method: "PATCH",
-                                              headers: {
-                                                "Content-Type":
-                                                  "application/json",
-                                              },
-                                              body: JSON.stringify({
-                                                isPersonal: true,
-                                              }),
-                                            },
-                                          );
-                                          if (response.ok) {
-                                            toast.success(
-                                              "Task moved to personal tasks",
-                                            );
-                                            fetchTasks(activeTeam!.id);
-                                          } else {
-                                            throw new Error(
-                                              "Failed to update task",
-                                            );
-                                          }
-                                        } catch (error) {
-                                          toast.error("Failed to move task");
-                                        }
-                                      }}
-                                    >
-                                      <User className="h-4 w-4 mr-1" />
-                                      Make Personal
-                                    </Button>
-                                  )}
-                                  {canCreateTasks && (
-                                    <Button
-                                      variant="ghost"
-                                      size="icon"
-                                      className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-destructive/10 hover:text-destructive"
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        handleDeleteClick(task, e);
-                                      }}
-                                    >
-                                      <Trash2 className="h-4 w-4" />
-                                    </Button>
-                                  )}
-                                </div>
-                              </div>
-                            </CardContent>
-                          </Card>
-                        </motion.div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* Personal Tasks Section */}
-                {filteredPersonalTasks.length > 0 && (
-                  <div className="space-y-4 pt-4 border-t">
-                    <div className="flex items-center gap-2">
-                      <User className="h-5 w-5 text-primary" />
-                      <h2 className="text-lg font-semibold">
-                        My Personal Tasks
-                      </h2>
-                      <Badge variant="secondary" className="ml-2">
-                        {filteredPersonalTasks.length}
-                      </Badge>
-                    </div>
-                    <div className="space-y-2">
-                      {filteredPersonalTasks.map((task, taskIndex) => (
-                        <motion.div
-                          key={task.id}
-                          initial={
-                            shouldAnimate ? { opacity: 0, y: 10 } : false
-                          }
-                          animate={shouldAnimate ? { opacity: 1, y: 0 } : {}}
-                          transition={{
-                            duration: 0.3,
-                            delay: taskIndex * 0.05,
-                          }}
-                        >
-                          <Card
-                            className="group hover:shadow-md transition-all cursor-pointer border-primary/20 bg-primary/5"
-                            onClick={() => handleEditTask(task)}
-                          >
-                            <CardContent className="p-4">
-                              <div className="flex items-start justify-between gap-4">
-                                <div className="flex-1 min-w-0">
-                                  <div className="flex items-center gap-2 mb-2 flex-wrap">
-                                    {task.type &&
-                                      (() => {
-                                        const TypeIcon = getTaskTypeIcon(
-                                          task.type,
-                                        );
-                                        const typeColor = getTaskTypeColor(
-                                          task.type,
-                                        );
-                                        return TypeIcon ? (
-                                          <TypeIcon
-                                            className={`h-4 w-4 ${typeColor}`}
-                                          />
-                                        ) : null;
-                                      })()}
-                                    <h3 className="font-semibold text-sm">
-                                      {task.name}
-                                    </h3>
-                                    <Badge
-                                      variant="outline"
-                                      className="text-xs border-primary/30 text-primary"
-                                    >
-                                      <User className="h-3 w-3 mr-1" />
-                                      Personal
-                                    </Badge>
-                                    <Badge
-                                      variant="outline"
-                                      className={`text-xs ${getPriorityColor(task.priority)}`}
-                                    >
-                                      <span
-                                        className={`h-1.5 w-1.5 rounded-full mr-1.5 ${getPriorityDot(task.priority)}`}
-                                      />
-                                      {task.priority}
-                                    </Badge>
-                                  </div>
-                                  {task.description && (
-                                    <p className="text-xs text-muted-foreground mb-2 line-clamp-2">
-                                      {task.description}
-                                    </p>
-                                  )}
-                                  <div className="flex items-center gap-4 text-xs text-muted-foreground">
-                                    {task.dueDate && (
-                                      <div className="flex items-center gap-1">
-                                        <Calendar className="h-3 w-3" />
-                                        {new Date(
-                                          task.dueDate,
-                                        ).toLocaleDateString("en-US", {
-                                          month: "short",
-                                          day: "numeric",
-                                          year: "numeric",
-                                        })}
-                                      </div>
-                                    )}
-                                    <Badge
-                                      variant="outline"
-                                      className="text-xs"
-                                    >
-                                      {task.status}
-                                    </Badge>
-                                  </div>
-                                </div>
-                                {canCreateTasks && (
-                                  <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-destructive/10 hover:text-destructive"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      handleDeleteClick(task, e);
-                                    }}
-                                  >
-                                    <Trash2 className="h-4 w-4" />
-                                  </Button>
-                                )}
-                              </div>
-                            </CardContent>
-                          </Card>
-                        </motion.div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
                 {filteredTasks.length === 0 ? (
                   <motion.div
                     initial={{ opacity: 0, y: 20 }}
@@ -1957,11 +1714,35 @@ export default function TasksPage() {
             <SheetHeader>
               <SheetTitle>Filter Tasks</SheetTitle>
               <SheetDescription>
-                Filter tasks by status, priority, type, and due date
+                Filter tasks by status, priority, type, due date, and personal
+                or patient
               </SheetDescription>
             </SheetHeader>
 
             <div className="mt-6 space-y-6">
+              <div className="space-y-3">
+                <Label>Show</Label>
+                <Select
+                  value={personalOrPatientFilter}
+                  onValueChange={(v: "all" | "personal" | "patient") =>
+                    setPersonalOrPatientFilter(v)
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="All tasks" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">
+                      All tasks (patient + personal)
+                    </SelectItem>
+                    <SelectItem value="patient">Patient tasks only</SelectItem>
+                    <SelectItem value="personal">
+                      Personal tasks only
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
               <div className="space-y-3">
                 <Label>Status</Label>
                 <Select value={statusFilter} onValueChange={setStatusFilter}>
@@ -2049,6 +1830,7 @@ export default function TasksPage() {
                     setPriorityFilter("all");
                     setTypeFilter("all");
                     setDueDateFilter("all");
+                    setPersonalOrPatientFilter("all");
                   }}
                 >
                   Clear All

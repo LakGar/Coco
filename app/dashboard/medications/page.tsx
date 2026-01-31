@@ -58,7 +58,7 @@ import { TaskForm } from "@/components/task-form";
 function buildRecurringDueDates(
   startDate: Date,
   recurring: "none" | "daily" | "weekly",
-  repeatCount: number
+  repeatCount: number,
 ): Date[] {
   if (recurring === "none" || repeatCount < 1) {
     return [startDate];
@@ -144,7 +144,7 @@ function MedicationForm({
       const dueDates = buildRecurringDueDates(
         startDate,
         formData.recurring,
-        formData.repeatCount
+        formData.repeatCount,
       );
       const payloadBase = {
         name: formData.name.trim(),
@@ -169,7 +169,7 @@ function MedicationForm({
         if (!res.ok) {
           const err = await res.json();
           throw new Error(
-            err.error || err.message || "Failed to create medication"
+            err.error || err.message || "Failed to create medication",
           );
         }
         created++;
@@ -177,13 +177,13 @@ function MedicationForm({
       toast.success(
         created === 1
           ? "Medication added"
-          : `${created} medication tasks created`
+          : `${created} medication tasks created`,
       );
       onOpenChange(false);
       onSuccess();
     } catch (err) {
       toast.error(
-        err instanceof Error ? err.message : "Failed to add medication"
+        err instanceof Error ? err.message : "Failed to add medication",
       );
     } finally {
       setLoading(false);
@@ -347,7 +347,7 @@ function MedicationForm({
                           ...p,
                           repeatCount: Math.max(
                             1,
-                            Math.min(365, parseInt(e.target.value, 10) || 1)
+                            Math.min(365, parseInt(e.target.value, 10) || 1),
                           ),
                         }))
                       }
@@ -383,6 +383,7 @@ export default function MedicationsPage() {
     teamData: teamDataFromStore,
     fetchTasks,
     fetchTeamData,
+    updateTask,
     removeTask,
     loading,
     errors,
@@ -416,7 +417,7 @@ export default function MedicationsPage() {
 
   const medications = React.useMemo(
     () => tasks.filter((t) => t.type === "MEDICATION" && !t.isPersonal),
-    [tasks]
+    [tasks],
   );
 
   const teamData = React.useMemo(() => {
@@ -453,7 +454,7 @@ export default function MedicationsPage() {
     name: string | null,
     firstName: string | null,
     lastName: string | null,
-    email: string
+    email: string,
   ) => {
     if (name)
       return name
@@ -530,6 +531,123 @@ export default function MedicationsPage() {
     if (activeTeam) await fetchTasks(activeTeam.id, true);
     setTaskFormOpen(false);
     setEditTask(null);
+  };
+
+  const handleCheckboxChange = async (task: Task, checked: boolean) => {
+    if (!activeTeam || !canCreate) return;
+    const newStatus = checked ? "DONE" : "TODO";
+    updateTask(activeTeam.id, task.id, { status: newStatus });
+    try {
+      const res = await fetch(`/api/teams/${activeTeam.id}/tasks/${task.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: newStatus }),
+      });
+      if (!res.ok) throw new Error("Failed to update status");
+      await fetchTasks(activeTeam.id, true);
+    } catch (e) {
+      console.error(e);
+      toast.error("Failed to update medication");
+      await fetchTasks(activeTeam.id, true);
+    }
+  };
+
+  const renderMedicationItem = (task: Task) => {
+    const isDone = task.status === "DONE";
+    return (
+      <li key={task.id}>
+        <Card
+          className="group hover:shadow-md transition-all cursor-pointer"
+          onClick={() => handleEdit(task)}
+        >
+          <CardContent className="p-4">
+            <div className="flex items-start justify-between gap-4">
+              <div
+                className="shrink-0 pt-0.5"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <input
+                  type="checkbox"
+                  checked={isDone}
+                  onChange={(e) => handleCheckboxChange(task, e.target.checked)}
+                  onClick={(e) => e.stopPropagation()}
+                  className="h-4 w-4 rounded border-input text-primary focus:ring-primary cursor-pointer"
+                />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 mb-2 flex-wrap">
+                  <Pill
+                    className={`h-4 w-4 shrink-0 ${getTaskTypeColor("MEDICATION")}`}
+                  />
+                  <h3
+                    className={`font-semibold text-sm ${isDone ? "line-through text-muted-foreground" : ""}`}
+                  >
+                    {task.name}
+                  </h3>
+                  <Badge
+                    variant="outline"
+                    className={`text-xs ${getPriorityColor(task.priority)}`}
+                  >
+                    {task.priority}
+                  </Badge>
+                  <Badge variant="outline" className="text-xs">
+                    {getStatusIcon(task.status)}
+                    <span className="ml-1">{task.status}</span>
+                  </Badge>
+                </div>
+                {task.description && (
+                  <p className="text-xs text-muted-foreground mb-2 line-clamp-2">
+                    {task.description}
+                  </p>
+                )}
+                <div className="flex items-center gap-4 text-xs text-muted-foreground">
+                  {task.dueDate && (
+                    <span className="flex items-center gap-1">
+                      <Calendar className="h-3 w-3" />
+                      {new Date(task.dueDate).toLocaleDateString("en-US", {
+                        month: "short",
+                        day: "numeric",
+                        year: "numeric",
+                        hour: task.dueDate ? "numeric" : undefined,
+                        minute: task.dueDate ? "2-digit" : undefined,
+                      })}
+                    </span>
+                  )}
+                  {task.assignedTo && (
+                    <span className="flex items-center gap-1">
+                      <Avatar className="h-4 w-4">
+                        <AvatarImage
+                          src={task.assignedTo.imageUrl || undefined}
+                        />
+                        <AvatarFallback className="text-[8px]">
+                          {getInitials(
+                            task.assignedTo.name,
+                            task.assignedTo.firstName,
+                            task.assignedTo.lastName,
+                            task.assignedTo.email,
+                          )}
+                        </AvatarFallback>
+                      </Avatar>
+                      {task.assignedTo.name || task.assignedTo.email}
+                    </span>
+                  )}
+                </div>
+              </div>
+              {canCreate && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 shrink-0 opacity-0 group-hover:opacity-100 hover:bg-destructive/10 hover:text-destructive"
+                  onClick={(e) => handleDeleteClick(task, e)}
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      </li>
+    );
   };
 
   if (isLoading) {
@@ -612,92 +730,8 @@ export default function MedicationsPage() {
               </Card>
             </div>
           ) : (
-            <ul className="space-y-2 max-w-3xl mx-auto">
-              {medications.map((task) => (
-                <li key={task.id}>
-                  <Card
-                    className="group hover:shadow-md transition-all cursor-pointer"
-                    onClick={() => handleEdit(task)}
-                  >
-                    <CardContent className="p-4">
-                      <div className="flex items-start justify-between gap-4">
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 mb-2 flex-wrap">
-                            <Pill
-                              className={`h-4 w-4 shrink-0 ${getTaskTypeColor("MEDICATION")}`}
-                            />
-                            <h3 className="font-semibold text-sm">
-                              {task.name}
-                            </h3>
-                            <Badge
-                              variant="outline"
-                              className={`text-xs ${getPriorityColor(task.priority)}`}
-                            >
-                              {task.priority}
-                            </Badge>
-                            <Badge variant="outline" className="text-xs">
-                              {getStatusIcon(task.status)}
-                              <span className="ml-1">{task.status}</span>
-                            </Badge>
-                          </div>
-                          {task.description && (
-                            <p className="text-xs text-muted-foreground mb-2 line-clamp-2">
-                              {task.description}
-                            </p>
-                          )}
-                          <div className="flex items-center gap-4 text-xs text-muted-foreground">
-                            {task.dueDate && (
-                              <span className="flex items-center gap-1">
-                                <Calendar className="h-3 w-3" />
-                                {new Date(task.dueDate).toLocaleDateString(
-                                  "en-US",
-                                  {
-                                    month: "short",
-                                    day: "numeric",
-                                    year: "numeric",
-                                    hour: task.dueDate ? "numeric" : undefined,
-                                    minute: task.dueDate
-                                      ? "2-digit"
-                                      : undefined,
-                                  }
-                                )}
-                              </span>
-                            )}
-                            {task.assignedTo && (
-                              <span className="flex items-center gap-1">
-                                <Avatar className="h-4 w-4">
-                                  <AvatarImage
-                                    src={task.assignedTo.imageUrl || undefined}
-                                  />
-                                  <AvatarFallback className="text-[8px]">
-                                    {getInitials(
-                                      task.assignedTo.name,
-                                      task.assignedTo.firstName,
-                                      task.assignedTo.lastName,
-                                      task.assignedTo.email
-                                    )}
-                                  </AvatarFallback>
-                                </Avatar>
-                                {task.assignedTo.name || task.assignedTo.email}
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                        {canCreate && (
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8 shrink-0 opacity-0 group-hover:opacity-100 hover:bg-destructive/10 hover:text-destructive"
-                            onClick={(e) => handleDeleteClick(task, e)}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        )}
-                      </div>
-                    </CardContent>
-                  </Card>
-                </li>
-              ))}
+            <ul className="space-y-2 w-full">
+              {medications.map(renderMedicationItem)}
             </ul>
           )}
         </div>
@@ -753,7 +787,7 @@ export default function MedicationsPage() {
               try {
                 const res = await fetch(
                   `/api/teams/${activeTeam.id}/tasks/${taskId}`,
-                  { method: "DELETE" }
+                  { method: "DELETE" },
                 );
                 if (!res.ok) throw new Error("Failed to delete");
                 toast.success("Medication task deleted");
@@ -804,7 +838,7 @@ function TaskFormWrapper({
       isPersonal: task.isPersonal ?? false,
       dueDate: task.dueDate ?? undefined,
     }),
-    [task]
+    [task],
   );
   return (
     <TaskForm

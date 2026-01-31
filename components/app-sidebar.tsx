@@ -12,6 +12,9 @@ import {
   Repeat,
   Phone,
   Heart,
+  History,
+  BarChart3,
+  Compass,
 } from "lucide-react";
 import { useUser } from "@clerk/nextjs";
 import { useTeamStore } from "@/store/use-team-store";
@@ -42,6 +45,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const { loadTeams, activeTeam } = useTeamStore();
   const [prismaUser, setPrismaUser] = React.useState<PrismaUser | null>(null);
   const [loadingUser, setLoadingUser] = React.useState(true);
+  const [canAccessJourney, setCanAccessJourney] = React.useState(false);
 
   // Load teams when component mounts
   React.useEffect(() => {
@@ -75,6 +79,26 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
 
     fetchUser();
   }, [isLoaded, clerkUser]);
+
+  // Patient Journey: only show nav if user is Admin or Physician
+  React.useEffect(() => {
+    if (!activeTeam?.id) {
+      setCanAccessJourney(false);
+      return;
+    }
+    let cancelled = false;
+    fetch(`/api/teams/${activeTeam.id}/journey/access`)
+      .then((res) => (res.ok ? res.json() : { canAccess: false }))
+      .then((data) => {
+        if (!cancelled) setCanAccessJourney(data.canAccess === true);
+      })
+      .catch(() => {
+        if (!cancelled) setCanAccessJourney(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [activeTeam?.id]);
 
   // Track imageUrl changes to force refresh
   const [imageUrlKey, setImageUrlKey] = React.useState(0);
@@ -133,12 +157,6 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         title: "Tasks",
         url: "/dashboard/tasks",
         icon: List,
-        items: [
-          {
-            title: "Add Task",
-            url: "#",
-          },
-        ],
       },
       {
         title: "Medications",
@@ -149,12 +167,6 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         title: "Routines",
         url: "/dashboard/routines",
         icon: Repeat,
-        items: [
-          {
-            title: "Add Routine",
-            url: "#",
-          },
-        ],
       },
       {
         title: "Notes",
@@ -187,12 +199,31 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         icon: Users,
       },
       {
+        title: "Audit trail",
+        url: "/dashboard/audit",
+        icon: History,
+      },
+      ...(canAccessJourney
+        ? [
+            {
+              title: "Patient Journey",
+              url: "/dashboard/patient-journey",
+              icon: Compass,
+            },
+          ]
+        : []),
+      {
+        title: "Insights",
+        url: "/dashboard/insights",
+        icon: BarChart3,
+      },
+      {
         title: "Settings",
         url: "/dashboard/settings",
         icon: Settings2,
       },
     ],
-    []
+    [canAccessJourney],
   );
 
   // Dynamic documents based on active team
