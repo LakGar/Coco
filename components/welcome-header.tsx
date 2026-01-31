@@ -1,18 +1,18 @@
-"use client"
+"use client";
 
-import * as React from "react"
-import { motion, useReducedMotion } from "framer-motion"
-import { Button } from "@/components/ui/button"
-import { BookOpen, Plus, FileText, ClipboardList } from "lucide-react"
-import { useRouter } from "next/navigation"
-import { format } from "date-fns"
+import * as React from "react";
+import { motion, useReducedMotion } from "framer-motion";
+import { Button } from "@/components/ui/button";
+import { BookOpen, Plus, FileText, ClipboardList } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { format } from "date-fns";
 
 interface WelcomeHeaderProps {
-  teamName?: string
-  onFillJournal?: () => void
-  onAddTask?: () => void
-  onAddNote?: () => void
-  onViewCarePlan?: () => void
+  teamName?: string;
+  onFillJournal?: () => void;
+  onAddTask?: () => void;
+  onAddNote?: () => void;
+  onViewCarePlan?: () => void;
 }
 
 export function WelcomeHeader({
@@ -22,20 +22,20 @@ export function WelcomeHeader({
   onAddNote,
   onViewCarePlan,
 }: WelcomeHeaderProps) {
-  const router = useRouter()
-  const shouldReduceMotion = useReducedMotion()
-  const shouldAnimate = !shouldReduceMotion
+  const router = useRouter();
+  const shouldReduceMotion = useReducedMotion();
+  const shouldAnimate = !shouldReduceMotion;
 
   const getGreeting = () => {
-    const hour = new Date().getHours()
-    if (hour < 12) return "Good morning"
-    if (hour < 17) return "Good afternoon"
-    return "Good evening"
-  }
+    const hour = new Date().getHours();
+    if (hour < 12) return "Good morning";
+    if (hour < 17) return "Good afternoon";
+    return "Good evening";
+  };
 
   const quickActions = [
     {
-      label: "Journal",
+      label: "Daily Activities",
       icon: BookOpen,
       onClick: onFillJournal || (() => router.push("/dashboard/routines")),
     },
@@ -45,16 +45,24 @@ export function WelcomeHeader({
       onClick: onAddTask || (() => router.push("/dashboard/tasks")),
     },
     {
-      label: "Note",
+      label: "Observations",
       icon: FileText,
-      onClick: onAddNote || (() => {router.push("/dashboard/notes")}),
+      onClick:
+        onAddNote ||
+        (() => {
+          router.push("/dashboard/notes");
+        }),
     },
     {
-      label: "Care Plan",
+      label: "Patient Journey",
       icon: ClipboardList,
-      onClick: onViewCarePlan || (() => {router.push("/dashboard/care-plan")}),
+      onClick:
+        onViewCarePlan ||
+        (() => {
+          router.push("/dashboard/care-plan");
+        }),
     },
-  ]
+  ];
 
   return (
     <motion.div
@@ -74,7 +82,7 @@ export function WelcomeHeader({
       </div>
       <div className="flex flex-wrap gap-2">
         {quickActions.map((action, index) => {
-          const Icon = action.icon
+          const Icon = action.icon;
           return (
             <Button
               key={index}
@@ -86,10 +94,9 @@ export function WelcomeHeader({
               <Icon className="h-4 w-4 mr-2" />
               {action.label}
             </Button>
-          )
+          );
         })}
       </div>
     </motion.div>
-  )
+  );
 }
-

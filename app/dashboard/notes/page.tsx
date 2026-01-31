@@ -154,7 +154,7 @@ export default function NotesPage() {
   const handleCreateNote = () => {
     if (!canCreateNotes) {
       toast.error(
-        "You do not have permission to create notes. Please contact your team admin.",
+        "You do not have permission to create observations. Please contact your team admin.",
       );
       return;
     }
@@ -188,15 +188,16 @@ export default function NotesPage() {
       if (!response.ok) {
         const errorData = await response
           .json()
-          .catch(() => ({ message: "Failed to create note" }));
+          .catch(() => ({ message: "Failed to create observation" }));
         if (response.status === 403) {
           toast.error(
-            errorData.message || "You do not have permission to create notes",
+            errorData.message ||
+              "You do not have permission to create Observations",
           );
         } else {
-          toast.error(errorData.message || "Failed to create note");
+          toast.error(errorData.message || "Failed to create observation");
         }
-        throw new Error(errorData.message || "Failed to create note");
+        throw new Error(errorData.message || "Failed to create observation");
       }
 
       const newNote = await response.json();
@@ -214,8 +215,8 @@ export default function NotesPage() {
       // Refresh notes to get full data with permissions
       await fetchNotes(activeTeam.id, true); // Force refresh
     } catch (error) {
-      console.error("Error creating note:", error);
-      toast.error("Failed to create note");
+      console.error("Error creating observation:", error);
+      toast.error("Failed to create observation");
       // Remove optimistic update on error
       if (activeTeam) {
         await fetchNotes(activeTeam.id, true);
@@ -249,8 +250,8 @@ export default function NotesPage() {
       // Refresh notes to ensure consistency
       await fetchNotes(activeTeam.id, true); // Force refresh
     } catch (error) {
-      console.error("Error deleting note:", error);
-      toast.error("Failed to delete note");
+      console.error("Error deleting observation:", error);
+      toast.error("Failed to delete observation");
       // Revert optimistic update on error
       await fetchNotes(activeTeam.id, true);
     }
@@ -286,7 +287,7 @@ export default function NotesPage() {
         <Card>
           <CardContent className="p-6">
             <p className="text-muted-foreground">
-              Please select a team to view notes
+              Please select a team to view observations
             </p>
           </CardContent>
         </Card>
@@ -299,7 +300,9 @@ export default function NotesPage() {
       <div className="flex items-center justify-center h-full">
         <div className="text-center">
           <Spinner className="h-8 w-8 mx-auto mb-4" />
-          <p className="text-sm text-muted-foreground">Loading notes...</p>
+          <p className="text-sm text-muted-foreground">
+            Loading observations...
+          </p>
         </div>
       </div>
     );
@@ -326,11 +329,11 @@ export default function NotesPage() {
             <div className="flex items-center justify-between gap-2">
               <div className="min-w-0 flex-1">
                 <h1 className="text-2xl md:text-3xl font-bold truncate">
-                  Notes
+                  Observations
                 </h1>
                 <p className="text-sm md:text-md text-muted-foreground truncate">
                   {filteredNotes.length}{" "}
-                  {filteredNotes.length === 1 ? "note" : "notes"}
+                  {filteredNotes.length === 1 ? "observation" : "observations"}
                 </p>
               </div>
               <div className="flex items-center gap-3 shrink-0">
@@ -341,7 +344,7 @@ export default function NotesPage() {
                     className="h-10 px-4"
                   >
                     <Plus className="md:mr-2 h-4 w-4" />
-                    <span className="hidden md:inline">Create Note</span>
+                    <span className="hidden md:inline">Create Observation</span>
                   </Button>
                 )}
               </div>
@@ -352,7 +355,7 @@ export default function NotesPage() {
               <div className="relative flex-1 min-w-0">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
                 <Input
-                  placeholder="Search notes..."
+                  placeholder="Search observations..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="pl-10 pr-12 h-10"
@@ -380,19 +383,19 @@ export default function NotesPage() {
                 <FileText className="h-8 w-8 text-muted-foreground" />
               </div>
               <h2 className="text-xl font-semibold mb-2">
-                {searchQuery ? "No notes found" : "No notes yet"}
+                {searchQuery ? "No observations found" : "No observations yet"}
               </h2>
               <p className="text-muted-foreground mb-4">
                 {searchQuery
                   ? "Try a different search term"
                   : canCreateNotes
-                    ? "Create your first note to get started"
-                    : "You don't have any notes yet"}
+                    ? "Create your first observation to get started"
+                    : "You don't have any observations yet"}
               </p>
               {canCreateNotes && !searchQuery && (
                 <Button onClick={handleCreateNote} className="mt-4">
                   <Plus className="mr-2 h-4 w-4" />
-                  Create Note
+                  Create Observation
                 </Button>
               )}
             </div>
@@ -495,7 +498,7 @@ export default function NotesPage() {
         <Dialog open={formOpen} onOpenChange={setFormOpen}>
           <DialogContent className="sm:max-w-2xl max-h-[90vh] flex flex-col">
             <DialogHeader>
-              <DialogTitle>Create Note</DialogTitle>
+              <DialogTitle>Create Observation</DialogTitle>
               <DialogDescription>
                 Create a new note and share it with team members
               </DialogDescription>
@@ -719,7 +722,7 @@ export default function NotesPage() {
                 onClick={handleSaveNote}
                 disabled={!title.trim() || !content.trim()}
               >
-                Create Note
+                Create Observation
               </Button>
             </DialogFooter>
           </DialogContent>

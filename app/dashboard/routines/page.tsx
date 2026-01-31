@@ -333,7 +333,7 @@ export default function RoutinesPage() {
             <div className="flex items-center justify-between gap-2">
               <div className="min-w-0 flex-1">
                 <h1 className="text-2xl md:text-3xl font-bold truncate">
-                  Daily Journal
+                  Daily Activities
                 </h1>
                 <p className="text-sm md:text-md text-muted-foreground truncate">
                   {filteredRoutines.length}{" "}
@@ -455,7 +455,7 @@ export default function RoutinesPage() {
                 </h3>
                 <p className="text-muted-foreground mb-6">
                   {routines.length === 0
-                    ? "Create a daily journal routine to track daily activities and observations. Perfect for tracking meals, mood, activities, and more."
+                    ? "Create a daily journal routine to track your patient's daily activities and observations. Perfect for tracking meals, mood, activities, and more."
                     : "Try adjusting your search or filters to see more routines."}
                 </p>
                 {canCreateRoutines && (
