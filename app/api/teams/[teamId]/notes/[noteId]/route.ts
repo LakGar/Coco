@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma"
 import { updateNoteSchema, validateRequest } from "@/lib/validations"
 import { requireTeamAccess, extractTeamId, isAuthError } from "@/lib/auth-middleware"
 import { createValidationErrorResponse, createNotFoundErrorResponse, createInternalErrorResponse } from "@/lib/error-handler"
+import { createAuditLog, AUDIT_ACTIONS } from "@/lib/audit"
 
 // GET /api/teams/[teamId]/notes/[noteId] - Get a specific note
 export async function GET(
@@ -223,6 +224,15 @@ export async function PATCH(
       },
     })
 
+    await createAuditLog({
+      teamId,
+      actorId: user.id,
+      action: AUDIT_ACTIONS.NOTE_UPDATED,
+      entityType: "Note",
+      entityId: noteId,
+      metadata: { title: updatedNote.title },
+    })
+
     // Calculate permissions (same logic as GET endpoint)
     const isCreator = updatedNote.createdById === user.id
     const isEditor = updatedNote.editors.some((e) => e.userId === user.id)
@@ -278,6 +288,15 @@ export async function DELETE(
         noteId,
       })
     }
+
+    await createAuditLog({
+      teamId,
+      actorId: user.id,
+      action: AUDIT_ACTIONS.NOTE_DELETED,
+      entityType: "Note",
+      entityId: noteId,
+      metadata: { title: note.title },
+    })
 
     // Delete note (cascade will handle editors and viewers)
     await prisma.note.delete({

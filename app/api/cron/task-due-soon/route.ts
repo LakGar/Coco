@@ -9,7 +9,7 @@ const DEDUP_WINDOW_MS = 2 * 60 * 60 * 1000; // don't re-notify within 2 hours
 
 /**
  * Cron: notify assignees when a task is due in the next 1 hour.
- * Run every 15–30 min (e.g. */15 * * * *).
+ * Run every 15–30 min (e.g. every 15 minutes).
  * Secured by CRON_SECRET.
  */
 export async function POST(req: Request) {
@@ -77,7 +77,10 @@ export async function POST(req: Request) {
         notified++;
       } catch (err) {
         const msg = `task ${task.id}: ${err instanceof Error ? err.message : String(err)}`;
-        loggerUtils.logError(err, { type: "cron_task_due_soon", taskId: task.id });
+        loggerUtils.logError(err, {
+          type: "cron_task_due_soon",
+          taskId: task.id,
+        });
         errors.push(msg);
       }
     }

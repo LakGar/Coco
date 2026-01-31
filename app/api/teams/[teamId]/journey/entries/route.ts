@@ -131,7 +131,13 @@ export async function POST(
       },
       include: {
         author: {
-          select: { id: true, name: true, firstName: true, lastName: true },
+          select: {
+            id: true,
+            name: true,
+            firstName: true,
+            lastName: true,
+            imageUrl: true,
+          },
         },
       },
     });
@@ -160,6 +166,7 @@ export async function POST(
                 [entry.author.firstName, entry.author.lastName]
                   .filter(Boolean)
                   .join(" "),
+              imageUrl: entry.author.imageUrl,
             }
           : null,
         linkedEntityType: entry.linkedEntityType,

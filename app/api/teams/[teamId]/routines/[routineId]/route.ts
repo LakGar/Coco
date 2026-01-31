@@ -4,6 +4,7 @@ import { updateRoutineSchema, validateRequest } from '@/lib/validations'
 import { rateLimit, addRateLimitHeaders } from '@/lib/rate-limit'
 import { requireTeamAccess, extractTeamId, isAuthError } from '@/lib/auth-middleware'
 import { createValidationErrorResponse, createNotFoundErrorResponse, createInternalErrorResponse } from '@/lib/error-handler'
+import { createAuditLog, AUDIT_ACTIONS } from '@/lib/audit'
 
 export async function PATCH(
   req: Request,

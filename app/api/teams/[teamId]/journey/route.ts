@@ -85,7 +85,13 @@ export async function GET(
           orderBy: { key: "asc" },
           include: {
             updatedBy: {
-              select: { id: true, name: true, firstName: true, lastName: true },
+              select: {
+                id: true,
+                name: true,
+                firstName: true,
+                lastName: true,
+                imageUrl: true,
+              },
             },
           },
         },
@@ -130,6 +136,7 @@ export async function GET(
                   name: true,
                   firstName: true,
                   lastName: true,
+                  imageUrl: true,
                 },
               },
             },
@@ -184,7 +191,13 @@ export async function GET(
       orderBy: { occurredAt: "desc" },
       include: {
         author: {
-          select: { id: true, name: true, firstName: true, lastName: true },
+          select: {
+            id: true,
+            name: true,
+            firstName: true,
+            lastName: true,
+            imageUrl: true,
+          },
         },
       },
     });
@@ -214,6 +227,7 @@ export async function GET(
                   [s.updatedBy.firstName, s.updatedBy.lastName]
                     .filter(Boolean)
                     .join(" "),
+                imageUrl: s.updatedBy.imageUrl,
               }
             : null,
         })),

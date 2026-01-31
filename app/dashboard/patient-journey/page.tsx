@@ -55,6 +55,7 @@ import {
   Loader2,
 } from "lucide-react";
 import { toast } from "sonner";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
 interface SnapshotData {
   rangeDays: number;
@@ -112,7 +113,7 @@ interface JourneySection {
   content: Record<string, unknown>;
   version: number;
   updatedAt: string;
-  updatedBy: { id: string; name: string } | null;
+  updatedBy: { id: string; name: string; imageUrl?: string | null } | null;
 }
 
 interface JourneyEntry {
@@ -121,7 +122,7 @@ interface JourneyEntry {
   title: string;
   content: Record<string, unknown> | { text?: string };
   authorId: string | null;
-  author: { id: string; name: string } | null;
+  author: { id: string; name: string; imageUrl?: string | null } | null;
   linkedEntityType: string | null;
   linkedEntityId: string | null;
   occurredAt: string;
@@ -783,7 +784,20 @@ export default function PatientJourneyPage() {
                     </span>
                     <span className="font-medium">{entry.title}</span>
                     {entry.author ? (
-                      <span className="text-sm text-muted-foreground">
+                      <span className="text-sm text-muted-foreground flex items-center gap-1.5">
+                        <Avatar className="h-5 w-5 shrink-0">
+                          <AvatarImage
+                            src={entry.author.imageUrl ?? undefined}
+                          />
+                          <AvatarFallback className="text-[10px] bg-muted text-muted-foreground">
+                            {(entry.author.name || "?")
+                              .split(/\s+/)
+                              .map((n) => n[0])
+                              .join("")
+                              .toUpperCase()
+                              .slice(0, 2)}
+                          </AvatarFallback>
+                        </Avatar>
                         by {entry.author.name}
                       </span>
                     ) : (
@@ -908,10 +922,34 @@ function SectionCard({
               )}
               <span className="font-medium">{section.title}</span>
             </div>
-            <span className="text-xs text-muted-foreground">
-              Last updated{" "}
-              {section.updatedBy ? `by ${section.updatedBy.name}` : ""} on{" "}
-              {format(new Date(section.updatedAt), "MMM d, yyyy")}
+            <span className="text-xs text-muted-foreground flex items-center gap-2">
+              {section.updatedBy && (
+                <>
+                  <Avatar className="h-5 w-5 shrink-0">
+                    <AvatarImage
+                      src={section.updatedBy.imageUrl ?? undefined}
+                    />
+                    <AvatarFallback className="text-[10px] bg-muted text-muted-foreground">
+                      {(section.updatedBy.name || "?")
+                        .split(/\s+/)
+                        .map((n) => n[0])
+                        .join("")
+                        .toUpperCase()
+                        .slice(0, 2)}
+                    </AvatarFallback>
+                  </Avatar>
+                  <span>
+                    Last updated by {section.updatedBy.name} on{" "}
+                    {format(new Date(section.updatedAt), "MMM d, yyyy")}
+                  </span>
+                </>
+              )}
+              {!section.updatedBy && (
+                <span>
+                  Last updated on{" "}
+                  {format(new Date(section.updatedAt), "MMM d, yyyy")}
+                </span>
+              )}
             </span>
           </button>
         </CollapsibleTrigger>

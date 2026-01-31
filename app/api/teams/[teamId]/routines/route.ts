@@ -17,6 +17,7 @@ import {
   createValidationErrorResponse,
   createInternalErrorResponse,
 } from "@/lib/error-handler";
+import { createAuditLog, AUDIT_ACTIONS } from "@/lib/audit";
 
 export async function GET(
   req: Request,
@@ -244,6 +245,15 @@ export async function POST(
           },
         },
       },
+    });
+
+    await createAuditLog({
+      teamId,
+      actorId: user.id,
+      action: AUDIT_ACTIONS.ROUTINE_CREATED,
+      entityType: "Routine",
+      entityId: routine.id,
+      metadata: { name: routine.name },
     });
 
     const response = NextResponse.json({ routine }, { status: 201 });

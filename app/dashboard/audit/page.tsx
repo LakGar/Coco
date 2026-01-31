@@ -6,8 +6,10 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Spinner } from "@/components/ui/spinner";
 import { format } from "date-fns";
-import { History, User, Loader2 } from "lucide-react";
+import { History, Loader2 } from "lucide-react";
 import { toast } from "sonner";
+import { UserAvatar } from "@/components/user-avatar";
+import type { PrismaUserProfile } from "@/lib/user-types";
 
 const ACTION_LABELS: Record<string, string> = {
   TASK_CREATED: "Created task",
@@ -30,6 +32,12 @@ const ACTION_LABELS: Record<string, string> = {
   CONTACT_CREATED: "Created contact",
   CONTACT_UPDATED: "Updated contact",
   CONTACT_DELETED: "Deleted contact",
+  JOURNEY_SECTION_UPDATED: "Updated care plan section",
+  JOURNEY_ENTRY_CREATED: "Added journey entry",
+  JOURNEY_SNAPSHOT_COMPUTED: "Computed journey snapshot",
+  MOOD_LOGGED: "Logged mood",
+  ROUTINE_INSTANCE_CREATED: "Journal entry",
+  ROUTINE_INSTANCE_UPDATED: "Updated journal entry",
 };
 
 interface AuditItem {
@@ -41,14 +49,7 @@ interface AuditItem {
   entityId: string | null;
   metadata: Record<string, unknown> | null;
   createdAt: string;
-  actor: {
-    id: string;
-    name: string | null;
-    firstName: string | null;
-    lastName: string | null;
-    email: string;
-    imageUrl: string | null;
-  };
+  actor: PrismaUserProfile;
 }
 
 export default function AuditPage() {
@@ -96,14 +97,26 @@ export default function AuditPage() {
     [actor.firstName, actor.lastName].filter(Boolean).join(" ") ||
     actor.email;
 
+  const actorInitials = (actor: AuditItem["actor"]) => {
+    const name = actorName(actor);
+    if (actor.firstName && actor.lastName)
+      return `${actor.firstName[0]}${actor.lastName[0]}`.toUpperCase();
+    if (name && name.length >= 2) return name.slice(0, 2).toUpperCase();
+    if (actor.email) return actor.email.slice(0, 2).toUpperCase();
+    return "?";
+  };
+
   const metadataSummary = (meta: Record<string, unknown> | null) => {
     if (!meta) return null;
     if (meta.name && typeof meta.name === "string") return meta.name;
+    if (meta.title && typeof meta.title === "string") return meta.title;
     if (meta.teamName && typeof meta.teamName === "string")
       return meta.teamName;
     if (meta.removedName && typeof meta.removedName === "string")
       return meta.removedName;
     if (meta.email && typeof meta.email === "string") return meta.email;
+    if (meta.sectionKey && typeof meta.sectionKey === "string")
+      return meta.sectionKey;
     return null;
   };
 
@@ -153,27 +166,44 @@ export default function AuditPage() {
           </Card>
         ) : (
           <ul className="space-y-2 max-w-3xl mx-auto">
-            {items.map((item) => (
-              <li key={item.id}>
-                <Card>
-                  <CardContent className="p-4 flex flex-wrap items-center gap-2">
-                    <User className="h-4 w-4 text-muted-foreground shrink-0" />
-                    <span className="font-medium">{actorName(item.actor)}</span>
-                    <span className="text-muted-foreground">
-                      {ACTION_LABELS[item.action] ?? item.action}
-                    </span>
-                    {metadataSummary(item.metadata) && (
-                      <span className="text-muted-foreground truncate">
-                        “{metadataSummary(item.metadata)}”
+            {items.map((item) => {
+              const summary = metadataSummary(item.metadata);
+              const actionLabel = ACTION_LABELS[item.action] ?? item.action;
+              return (
+                <li key={item.id}>
+                  <Card>
+                    <CardContent className="p-4 flex items-center gap-3 min-w-0">
+                      <UserAvatar
+                        src={item.actor.imageUrl ?? undefined}
+                        alt={actorName(item.actor)}
+                        fallback={actorInitials(item.actor)}
+                        className="h-9 w-9 shrink-0"
+                      />
+                      <div className="flex-1 min-w-0 flex items-baseline gap-2 flex-wrap">
+                        <span className="font-medium shrink-0">
+                          {actorName(item.actor)}
+                        </span>
+                        <span className="text-muted-foreground text-sm shrink-0">
+                          {actionLabel}
+                          {summary != null && (
+                            <span className="text-muted-foreground/90">
+                              {" "}
+                              “{summary}”
+                            </span>
+                          )}
+                        </span>
+                      </div>
+                      <span className="text-xs text-muted-foreground shrink-0 whitespace-nowrap">
+                        {format(
+                          new Date(item.createdAt),
+                          "MMM d, yyyy · h:mm a",
+                        )}
                       </span>
-                    )}
-                    <span className="text-xs text-muted-foreground ml-auto shrink-0">
-                      {format(new Date(item.createdAt), "MMM d, yyyy · h:mm a")}
-                    </span>
-                  </CardContent>
-                </Card>
-              </li>
-            ))}
+                    </CardContent>
+                  </Card>
+                </li>
+              );
+            })}
           </ul>
         )}
         {nextCursor && (

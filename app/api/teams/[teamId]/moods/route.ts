@@ -12,6 +12,7 @@ import {
   createInternalErrorResponse,
 } from "@/lib/error-handler";
 import { createSystemJourneyEntry } from "@/lib/patient-journey-entries";
+import { createAuditLog, AUDIT_ACTIONS } from "@/lib/audit";
 
 // GET /api/teams/[teamId]/moods - Get moods for a team
 export async function GET(
@@ -210,6 +211,15 @@ export async function POST(
         occurredAt: observed,
       });
     }
+
+    await createAuditLog({
+      teamId,
+      actorId: user.id,
+      action: AUDIT_ACTIONS.MOOD_LOGGED,
+      entityType: "Mood",
+      entityId: mood.id,
+      metadata: { rating: mood.rating, observedAt: observed.toISOString() },
+    });
 
     const response = NextResponse.json(mood, { status: 201 });
     addRateLimitHeaders(

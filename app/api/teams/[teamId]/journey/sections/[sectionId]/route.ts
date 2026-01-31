@@ -120,7 +120,13 @@ export async function PATCH(
       where: { id: section.id },
       include: {
         updatedBy: {
-          select: { id: true, name: true, firstName: true, lastName: true },
+          select: {
+            id: true,
+            name: true,
+            firstName: true,
+            lastName: true,
+            imageUrl: true,
+          },
         },
       },
     });
@@ -142,6 +148,7 @@ export async function PATCH(
                     [updated.updatedBy.firstName, updated.updatedBy.lastName]
                       .filter(Boolean)
                       .join(" "),
+                  imageUrl: updated.updatedBy.imageUrl,
                 }
               : null,
           }

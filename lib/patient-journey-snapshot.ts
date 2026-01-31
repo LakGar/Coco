@@ -101,15 +101,18 @@ export async function computeSnapshotForTeam(
     }),
   ]);
 
-  const medicationAdherence = computeMedicationAdherence(
+  const medicationAdherence = await computeMedicationAdherence(
     teamId,
     rangeStart,
     rangeEnd,
   );
   const totals = {
-    tasksCompleted: tasksInRange.reduce((s, d) => s + (d.completed ?? 0), 0),
-    tasksOverdue: tasksInRange.reduce((s, d) => s + (d.overdue ?? 0), 0),
-    tasksDueSoon: tasksInRange.reduce((s, d) => s + (d.dueSoon ?? 0), 0),
+    tasksCompleted: tasksInRange.reduce(
+      (s, d) => s + Number(d.completed ?? 0),
+      0,
+    ),
+    tasksOverdue: tasksInRange.reduce((s, d) => s + Number(d.overdue ?? 0), 0),
+    tasksDueSoon: tasksInRange.reduce((s, d) => s + Number(d.dueSoon ?? 0), 0),
     medicationAdherencePercent: medicationAdherence?.percent ?? null,
     routineCompletionPercent: aggregateRoutineCompletion(
       routineInstancesInRange,

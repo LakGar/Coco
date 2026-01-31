@@ -1,11 +1,11 @@
-"use client"
+"use client";
 
-import * as React from "react"
-import { useTeamStore } from "@/store/use-team-store"
-import { Button } from "@/components/ui/button"
-import { Card, CardContent } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
-import { Spinner } from "@/components/ui/spinner"
+import * as React from "react";
+import { useTeamStore } from "@/store/use-team-store";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Spinner } from "@/components/ui/spinner";
 import {
   Bell,
   CheckCircle2,
@@ -17,21 +17,22 @@ import {
   FileText,
   Settings,
   CheckCheck,
-} from "lucide-react"
-import { format } from "date-fns"
-import { toast } from "sonner"
-import { useRouter } from "next/navigation"
+  Trash2,
+} from "lucide-react";
+import { format } from "date-fns";
+import { toast } from "sonner";
+import { useRouter } from "next/navigation";
 
 interface Notification {
-  id: string
-  type: string
-  title: string
-  message: string
-  isRead: boolean
-  readAt?: string | null
-  linkUrl?: string | null
-  linkLabel?: string | null
-  createdAt: string
+  id: string;
+  type: string;
+  title: string;
+  message: string;
+  isRead: boolean;
+  readAt?: string | null;
+  linkUrl?: string | null;
+  linkLabel?: string | null;
+  createdAt: string;
 }
 
 const notificationIcons: Record<string, any> = {
@@ -41,7 +42,7 @@ const notificationIcons: Record<string, any> = {
   TEAM_INVITE: Users,
   PERMISSION_CHANGE: Settings,
   SYSTEM_ALERT: AlertCircle,
-}
+};
 
 const notificationColors: Record<string, string> = {
   CONTACT_SETUP_REMINDER: "text-amber-500",
@@ -50,44 +51,44 @@ const notificationColors: Record<string, string> = {
   TEAM_INVITE: "text-blue-500",
   PERMISSION_CHANGE: "text-purple-500",
   SYSTEM_ALERT: "text-red-600",
-}
+};
 
 export default function NotificationsPage() {
-  const { activeTeam } = useTeamStore()
-  const router = useRouter()
-  const [notifications, setNotifications] = React.useState<Notification[]>([])
-  const [unreadCount, setUnreadCount] = React.useState(0)
-  const [loading, setLoading] = React.useState(true)
+  const { activeTeam } = useTeamStore();
+  const router = useRouter();
+  const [notifications, setNotifications] = React.useState<Notification[]>([]);
+  const [unreadCount, setUnreadCount] = React.useState(0);
+  const [loading, setLoading] = React.useState(true);
 
   const fetchNotifications = React.useCallback(async () => {
-    if (!activeTeam) return
+    if (!activeTeam) return;
 
     try {
-      setLoading(true)
-      const response = await fetch(`/api/teams/${activeTeam.id}/notifications`)
+      setLoading(true);
+      const response = await fetch(`/api/teams/${activeTeam.id}/notifications`);
       if (response.ok) {
-        const data = await response.json()
-        setNotifications(data.notifications || [])
-        setUnreadCount(data.unreadCount || 0)
+        const data = await response.json();
+        setNotifications(data.notifications || []);
+        setUnreadCount(data.unreadCount || 0);
       } else {
-        throw new Error("Failed to fetch notifications")
+        throw new Error("Failed to fetch notifications");
       }
     } catch (error) {
-      if (process.env.NODE_ENV === 'development') {
-        console.error("Error fetching notifications:", error)
+      if (process.env.NODE_ENV === "development") {
+        console.error("Error fetching notifications:", error);
       }
-      toast.error("Failed to load notifications")
+      toast.error("Failed to load notifications");
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }, [activeTeam])
+  }, [activeTeam]);
 
   React.useEffect(() => {
-    fetchNotifications()
-  }, [fetchNotifications])
+    fetchNotifications();
+  }, [fetchNotifications]);
 
   const handleMarkAsRead = async (notificationId: string) => {
-    if (!activeTeam) return
+    if (!activeTeam) return;
 
     try {
       const response = await fetch(
@@ -101,28 +102,28 @@ export default function NotificationsPage() {
             action: "markRead",
             notificationIds: [notificationId],
           }),
-        }
-      )
+        },
+      );
 
       if (response.ok) {
         setNotifications((prev) =>
           prev.map((n) =>
             n.id === notificationId
               ? { ...n, isRead: true, readAt: new Date().toISOString() }
-              : n
-          )
-        )
-        setUnreadCount((prev) => Math.max(0, prev - 1))
+              : n,
+          ),
+        );
+        setUnreadCount((prev) => Math.max(0, prev - 1));
       }
     } catch (error) {
-      if (process.env.NODE_ENV === 'development') {
-        console.error("Error marking notification as read:", error)
+      if (process.env.NODE_ENV === "development") {
+        console.error("Error marking notification as read:", error);
       }
     }
-  }
+  };
 
   const handleMarkAllAsRead = async () => {
-    if (!activeTeam) return
+    if (!activeTeam) return;
 
     try {
       const response = await fetch(
@@ -135,8 +136,8 @@ export default function NotificationsPage() {
           body: JSON.stringify({
             action: "markAllRead",
           }),
-        }
-      )
+        },
+      );
 
       if (response.ok) {
         setNotifications((prev) =>
@@ -144,34 +145,55 @@ export default function NotificationsPage() {
             ...n,
             isRead: true,
             readAt: n.readAt || new Date().toISOString(),
-          }))
-        )
-        setUnreadCount(0)
-        toast.success("All notifications marked as read")
+          })),
+        );
+        setUnreadCount(0);
+        toast.success("All notifications marked as read");
       }
     } catch (error) {
-      if (process.env.NODE_ENV === 'development') {
-        console.error("Error marking all as read:", error)
+      if (process.env.NODE_ENV === "development") {
+        console.error("Error marking all as read:", error);
       }
-      toast.error("Failed to mark all as read")
+      toast.error("Failed to mark all as read");
     }
-  }
+  };
 
   const handleNotificationClick = (notification: Notification) => {
     if (!notification.isRead) {
-      handleMarkAsRead(notification.id)
+      handleMarkAsRead(notification.id);
     }
 
     if (notification.linkUrl) {
-      router.push(notification.linkUrl)
+      router.push(notification.linkUrl);
     }
-  }
+  };
+
+  const handleDelete = async (e: React.MouseEvent, notificationId: string) => {
+    e.stopPropagation();
+    if (!activeTeam) return;
+    try {
+      const res = await fetch(
+        `/api/teams/${activeTeam.id}/notifications?id=${encodeURIComponent(notificationId)}`,
+        { method: "DELETE" },
+      );
+      if (res.ok) {
+        setNotifications((prev) => prev.filter((n) => n.id !== notificationId));
+        setUnreadCount((c) => {
+          const n = notifications.find((x) => x.id === notificationId);
+          return n && !n.isRead ? Math.max(0, c - 1) : c;
+        });
+        toast.success("Notification removed");
+      }
+    } catch {
+      toast.error("Failed to remove notification");
+    }
+  };
 
   const getNotificationIcon = (type: string) => {
-    const Icon = notificationIcons[type] || Bell
-    const color = notificationColors[type] || "text-muted-foreground"
-    return <Icon className={`h-5 w-5 ${color}`} />
-  }
+    const Icon = notificationIcons[type] || Bell;
+    const color = notificationColors[type] || "text-muted-foreground";
+    return <Icon className={`h-5 w-5 ${color}`} />;
+  };
 
   if (!activeTeam) {
     return (
@@ -180,7 +202,7 @@ export default function NotificationsPage() {
           <p className="text-muted-foreground">No team selected</p>
         </Card>
       </div>
-    )
+    );
   }
 
   if (loading) {
@@ -188,11 +210,11 @@ export default function NotificationsPage() {
       <div className="flex items-center justify-center h-full">
         <Spinner />
       </div>
-    )
+    );
   }
 
-  const unreadNotifications = notifications.filter((n) => !n.isRead)
-  const readNotifications = notifications.filter((n) => n.isRead)
+  const unreadNotifications = notifications.filter((n) => !n.isRead);
+  const readNotifications = notifications.filter((n) => n.isRead);
 
   return (
     <div className="flex flex-col h-full">
@@ -236,24 +258,37 @@ export default function NotificationsPage() {
                           <h3 className="font-semibold text-sm">
                             {notification.title}
                           </h3>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-6 w-6 shrink-0"
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              handleMarkAsRead(notification.id)
-                            }}
-                          >
-                            <CheckCircle2 className="h-4 w-4" />
-                          </Button>
+                          <div className="flex items-center gap-0.5 shrink-0">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-6 w-6"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleMarkAsRead(notification.id);
+                              }}
+                            >
+                              <CheckCircle2 className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-6 w-6 text-muted-foreground hover:text-destructive"
+                              onClick={(e) => handleDelete(e, notification.id)}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
                         </div>
                         <p className="text-sm text-muted-foreground mb-2">
                           {notification.message}
                         </p>
                         <div className="flex items-center justify-between">
                           <span className="text-xs text-muted-foreground">
-                            {format(new Date(notification.createdAt), "MMM d, h:mm a")}
+                            {format(
+                              new Date(notification.createdAt),
+                              "MMM d, h:mm a",
+                            )}
                           </span>
                           {notification.linkUrl && (
                             <Badge variant="outline" className="text-xs">
@@ -290,14 +325,27 @@ export default function NotificationsPage() {
                           <h3 className="font-semibold text-sm">
                             {notification.title}
                           </h3>
-                          <Circle className="h-4 w-4 text-muted-foreground shrink-0" />
+                          <div className="flex items-center gap-0.5 shrink-0">
+                            <Circle className="h-4 w-4 text-muted-foreground" />
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-6 w-6 text-muted-foreground hover:text-destructive"
+                              onClick={(e) => handleDelete(e, notification.id)}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
                         </div>
                         <p className="text-sm text-muted-foreground mb-2">
                           {notification.message}
                         </p>
                         <div className="flex items-center justify-between">
                           <span className="text-xs text-muted-foreground">
-                            {format(new Date(notification.createdAt), "MMM d, h:mm a")}
+                            {format(
+                              new Date(notification.createdAt),
+                              "MMM d, h:mm a",
+                            )}
                           </span>
                           {notification.linkUrl && (
                             <Badge variant="outline" className="text-xs">
@@ -325,5 +373,5 @@ export default function NotificationsPage() {
         </div>
       </div>
     </div>
-  )
+  );
 }

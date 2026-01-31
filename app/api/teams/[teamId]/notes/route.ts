@@ -14,6 +14,7 @@ import {
   createInternalErrorResponse,
 } from "@/lib/error-handler";
 import { loggerUtils } from "@/lib/logger";
+import { createAuditLog, AUDIT_ACTIONS } from "@/lib/audit";
 
 // GET /api/teams/[teamId]/notes - Get all notes for a team (user can see if they're creator, editor, or viewer)
 export async function GET(
@@ -289,6 +290,15 @@ export async function POST(
           },
         },
       },
+    });
+
+    await createAuditLog({
+      teamId,
+      actorId: user.id,
+      action: AUDIT_ACTIONS.NOTE_CREATED,
+      entityType: "Note",
+      entityId: note.id,
+      metadata: { title: note.title },
     });
 
     const response = NextResponse.json(note, { status: 201 });

@@ -284,6 +284,7 @@ export async function DELETE(
           select: {
             id: true,
             name: true,
+            email: true,
           },
         },
       },

@@ -7,7 +7,7 @@ import { SidebarTrigger } from "@/components/ui/sidebar";
 import { HeaderUser } from "@/components/header-user";
 import { NightlyJournalPrompt } from "@/components/nightly-journal-prompt";
 import { ErrorBoundaryWrapper } from "@/components/error-boundary-wrapper";
-import { NotificationBell } from "@/components/notification-bell";
+import { NotificationDropdown } from "@/components/notification-dropdown";
 
 export default function DashboardLayout({
   children,
@@ -23,7 +23,7 @@ export default function DashboardLayout({
             <div className="flex items-center justify-between gap-2 px-4 w-full min-w-0">
               <SidebarTrigger className="-ml-1 shrink-0" />
               <div className="flex items-center gap-2">
-                <NotificationBell />
+                <NotificationDropdown variant="header" />
                 <HeaderUser />
               </div>
             </div>

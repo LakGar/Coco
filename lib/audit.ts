@@ -1,3 +1,4 @@
+import type { Prisma } from "@prisma/client";
 import { prisma } from "./prisma";
 import { log } from "./logger";
 
@@ -16,6 +17,9 @@ export const AUDIT_ACTIONS = {
   ROUTINE_CREATED: "ROUTINE_CREATED",
   ROUTINE_UPDATED: "ROUTINE_UPDATED",
   ROUTINE_DELETED: "ROUTINE_DELETED",
+  ROUTINE_INSTANCE_CREATED: "ROUTINE_INSTANCE_CREATED",
+  ROUTINE_INSTANCE_UPDATED: "ROUTINE_INSTANCE_UPDATED",
+  MOOD_LOGGED: "MOOD_LOGGED",
   NOTE_CREATED: "NOTE_CREATED",
   NOTE_UPDATED: "NOTE_UPDATED",
   NOTE_DELETED: "NOTE_DELETED",
@@ -52,7 +56,9 @@ export async function createAuditLog(
         action: params.action,
         entityType: params.entityType ?? null,
         entityId: params.entityId ?? null,
-        metadata: params.metadata ?? undefined,
+        metadata: (params.metadata ?? undefined) as
+          | Prisma.InputJsonValue
+          | undefined,
       },
     });
   } catch (error) {

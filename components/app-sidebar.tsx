@@ -22,6 +22,7 @@ import { useTeamStore } from "@/store/use-team-store";
 import { NavMain } from "@/components/nav-main";
 import { NavDocuments } from "@/components/nav-documents";
 import { NavUser } from "@/components/nav-user";
+import { NotificationDropdown } from "@/components/notification-dropdown";
 import { TeamSwitcher } from "@/components/team-switcher";
 import {
   Sidebar,
@@ -30,20 +31,14 @@ import {
   SidebarHeader,
   SidebarRail,
 } from "@/components/ui/sidebar";
-
-interface PrismaUser {
-  id: string;
-  name: string | null;
-  firstName: string | null;
-  lastName: string | null;
-  email: string;
-  imageUrl: string | null;
-}
+import type { PrismaUserProfile } from "@/lib/user-types";
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const { user: clerkUser, isLoaded } = useUser();
   const { loadTeams, activeTeam } = useTeamStore();
-  const [prismaUser, setPrismaUser] = React.useState<PrismaUser | null>(null);
+  const [prismaUser, setPrismaUser] = React.useState<PrismaUserProfile | null>(
+    null,
+  );
   const [loadingUser, setLoadingUser] = React.useState(true);
   const [canAccessJourney, setCanAccessJourney] = React.useState(false);
 
@@ -67,6 +62,19 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         if (response.ok) {
           const data = await response.json();
           setPrismaUser(data.user);
+          // If Prisma has no image but Clerk does, backfill so audit/APIs get it
+          if (
+            !data.user?.imageUrl &&
+            clerkUser.imageUrl &&
+            typeof clerkUser.imageUrl === "string"
+          ) {
+            fetch("/api/sync-user", { method: "POST" })
+              .then((r) => r.ok && r.json())
+              .then((sync) => {
+                if (sync?.user?.imageUrl) setPrismaUser(sync.user);
+              })
+              .catch(() => {});
+          }
         }
       } catch (error) {
         if (process.env.NODE_ENV === "development") {
@@ -140,7 +148,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
     return {
       name,
       email,
-      avatar: avatarUrl,
+      imageUrl: avatarUrl,
     };
   }, [clerkUser, isLoaded, loadingUser, prismaUser, imageUrlKey]);
 
@@ -275,6 +283,9 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         {documents.length > 0 && <NavDocuments documents={documents} />}
       </SidebarContent>
       <SidebarFooter>
+        <div className="px-2 py-1">
+          <NotificationDropdown variant="sidebar" className="w-full" />
+        </div>
         {user ? (
           <NavUser user={user} />
         ) : (
