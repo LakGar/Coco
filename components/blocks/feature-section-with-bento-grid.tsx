@@ -1,140 +1,227 @@
 "use client";
-import React from "react";
+
+import React, { useMemo } from "react";
 import { cn } from "@/lib/utils";
 import Image from "next/image";
-import createGlobe from "cobe";
-import { useEffect, useRef } from "react";
 import { motion } from "framer-motion";
-import { Bell, Calendar, Users, CheckCircle2, Circle } from "lucide-react";
+import {
+  Bell,
+  Calendar,
+  Users,
+  Circle,
+  ClipboardList,
+  Pill,
+  FileText,
+  UsersRound,
+} from "lucide-react";
 import { RoutineCircularChart } from "@/components/routine-circular-chart";
 
-export function FeaturesSectionWithBentoGrid() {
-  const features = [
+function getRoutineMockData() {
+  const now = Date.now();
+  return [
     {
-      title: "Care Team Coordination",
-      description:
-        "Seamlessly coordinate with family members, caregivers, and healthcare providers in one unified platform.",
-      skeleton: <SkeletonOne />,
-      className: "col-span-1 md:col-span-4 lg:col-span-4",
+      name: "Morning Medication",
+      recurrenceDaysOfWeek: [0, 1, 2, 3, 4, 5, 6],
+      instances: [
+        { entryDate: new Date(now).toISOString().split("T")[0] },
+        { entryDate: new Date(now - 86400000).toISOString().split("T")[0] },
+        { entryDate: new Date(now - 172800000).toISOString().split("T")[0] },
+        { entryDate: new Date(now - 259200000).toISOString().split("T")[0] },
+        { entryDate: new Date(now - 345600000).toISOString().split("T")[0] },
+      ],
     },
     {
-      title: "Smart Notifications",
-      description:
-        "Stay informed with intelligent notifications that keep your care team aligned and aware of important updates.",
-      skeleton: <SkeletonTwo />,
-      className: "col-span-1 md:col-span-2 lg:col-span-2",
-    },
-    {
-      title: "Routine Management",
-      description:
-        "Track daily routines, medications, and appointments with intelligent scheduling and reminders.",
-      skeleton: <SkeletonThree />,
-      className: "col-span-1 md:col-span-3 lg:col-span-3",
-    },
-    {
-      title: "Community Connectivity",
-      description:
-        "Connect with caregivers worldwide. Join a global community of support, share experiences, and find strength together.",
-      skeleton: <SkeletonFour />,
-      className: "col-span-1 md:col-span-3 lg:col-span-3",
+      name: "Evening Walk",
+      recurrenceDaysOfWeek: [1, 3, 5],
+      instances: [
+        { entryDate: new Date(now - 86400000).toISOString().split("T")[0] },
+        { entryDate: new Date(now - 259200000).toISOString().split("T")[0] },
+      ],
     },
   ];
+}
+
+const FEATURE_CARDS = [
+  {
+    title: "Assign tasks + routines",
+    description:
+      "Create to-do items and daily habits for your loved one. You can choose who does what and see when each task is done. No one has to remember everything alone.",
+    icon: ClipboardList,
+    gradient:
+      "from-blue-100 to-indigo-100 dark:from-blue-950/40 dark:to-indigo-950/40",
+    iconBg: "bg-blue-500/10 text-blue-600 dark:text-blue-400",
+  },
+  {
+    title: "Track meds separately",
+    description:
+      "Keep all medications in one simple list with the right dose and time for each. You get gentle reminders so no dose is missed, and refill dates are tracked for you.",
+    icon: Pill,
+    gradient:
+      "from-emerald-100 to-teal-100 dark:from-emerald-950/40 dark:to-teal-950/40",
+    iconBg: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
+  },
+  {
+    title: "Share observations + updates",
+    description:
+      "Write down how the day went, any changes in mood or health, and notes from doctor visits. The whole care team can read and add updates in one place, so everyone stays informed.",
+    icon: FileText,
+    gradient:
+      "from-amber-100 to-orange-100 dark:from-amber-950/40 dark:to-orange-950/40",
+    iconBg: "bg-amber-500/10 text-amber-600 dark:text-amber-400",
+  },
+  {
+    title: "Keep everyone aligned",
+    description:
+      "Family, paid caregivers, and doctors all see the same information. Everyone stays on the same page so your loved one gets consistent, coordinated care—without confusion or missed details.",
+    icon: UsersRound,
+    gradient:
+      "from-violet-100 to-purple-100 dark:from-violet-950/40 dark:to-purple-950/40",
+    iconBg: "bg-violet-500/10 text-violet-600 dark:text-violet-400",
+  },
+];
+
+export function FeaturesSectionWithBentoGrid() {
   return (
-    <div className="relative z-20 py-10 lg:py-40 max-w-7xl mx-auto">
-      <div className="px-8">
-        <h4 className="text-3xl lg:text-5xl lg:leading-tight max-w-5xl mx-auto text-center tracking-tight font-light text-gray-900 dark:text-white">
-          Everything you need to{" "}
-          <span className="italic text-amber-600">care together</span>
-        </h4>
+    <div className="relative z-20 py-16 lg:py-28 max-w-7xl mx-auto">
+      {/* Section with background */}
+      <div className="relative overflow-hidden rounded-3xl">
+        {/* Background image - soft, coherent visual */}
+        <div className="absolute inset-0">
+          <Image
+            src="/onboarding-right.png"
+            alt=""
+            fill
+            className="object-cover object-left opacity-[0.08] dark:opacity-[0.06]"
+            priority={false}
+          />
+          <div className="absolute inset-0 bg-gradient-to-b from-white/95 via-white/90 to-white dark:from-neutral-950/95 dark:via-neutral-950/90 dark:to-neutral-950" />
+        </div>
 
-        <p className="text-sm lg:text-base max-w-2xl my-4 mx-auto text-gray-600 text-center font-normal leading-relaxed dark:text-neutral-300">
-          Powerful tools designed to bring your care team closer and make
-          caregiving more manageable.
-        </p>
-      </div>
+        <div className="relative px-6 sm:px-8 lg:px-12 py-12 lg:py-16">
+          {/* Headline */}
+          <div className="max-w-3xl mx-auto text-center mb-12 lg:mb-14">
+            <h2 className="text-3xl lg:text-5xl lg:leading-tight tracking-tight font-light text-gray-900 dark:text-white">
+              Everything you need to{" "}
+              <span className="italic text-amber-600">care together</span>
+            </h2>
+            <p className="text-base lg:text-lg text-gray-600 dark:text-neutral-400 mt-4 max-w-2xl mx-auto font-normal leading-relaxed">
+              One place for your care team: assign work, track meds, share
+              updates, and stay aligned—family, caregivers, and clinicians.
+            </p>
+          </div>
 
-      <div className="relative">
-        <div className="grid grid-cols-1 md:grid-cols-6 lg:grid-cols-6 mt-12 gap-4">
-          {features.map((feature, index) => (
-            <FeatureCard
-              key={feature.title}
-              className={feature.className}
-              overflowHidden={index === 0}
+          {/* Four feature cards: image area + text on top */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 lg:gap-6 mb-14 lg:mb-16">
+            {FEATURE_CARDS.map((card, i) => {
+              const Icon = card.icon;
+              return (
+                <motion.article
+                  key={card.title}
+                  className={cn(
+                    "relative rounded-2xl overflow-hidden bg-white dark:bg-neutral-900 shadow-md border border-gray-100 dark:border-neutral-800",
+                    "flex flex-col"
+                  )}
+                  initial={{ opacity: 0, y: 16 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  viewport={{ once: true }}
+                  transition={{ duration: 0.35, delay: i * 0.06 }}
+                >
+                  {/* Card image area - gradient + icon (no photo) */}
+                  <div
+                    className={cn(
+                      "h-28 lg:h-32 w-full bg-gradient-to-br flex items-center justify-center",
+                      card.gradient
+                    )}
+                  >
+                    <div className={cn("rounded-2xl p-4", card.iconBg)}>
+                      <Icon
+                        className="w-10 h-10 lg:w-12 lg:h-12"
+                        strokeWidth={1.5}
+                      />
+                    </div>
+                  </div>
+                  {/* Text on top of card (above image in layout order; we'll use flex-col so text comes after image) */}
+                  <div className="flex flex-col flex-1 p-5 lg:p-6">
+                    <h3 className="text-lg font-medium tracking-tight text-gray-900 dark:text-white mb-2">
+                      {card.title}
+                    </h3>
+                    <p className="text-sm text-gray-600 dark:text-neutral-400 leading-relaxed">
+                      {card.description}
+                    </p>
+                  </div>
+                </motion.article>
+              );
+            })}
+          </div>
+
+          {/* Two cards: Notifications + Routines */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 lg:gap-8">
+            {/* Notifications card - with background */}
+            <motion.div
+              className="relative rounded-2xl overflow-hidden bg-white dark:bg-neutral-900 shadow-lg border border-gray-100 dark:border-neutral-800"
+              initial={{ opacity: 0, y: 20 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              transition={{ duration: 0.4 }}
             >
-              <FeatureTitle>{feature.title}</FeatureTitle>
-              <FeatureDescription>{feature.description}</FeatureDescription>
-              <div className="h-full w-full">{feature.skeleton}</div>
-            </FeatureCard>
-          ))}
+              <div className="absolute inset-0">
+                <Image
+                  src="/hero.png"
+                  alt=""
+                  fill
+                  className="object-cover object-center opacity-[0.04] dark:opacity-[0.03]"
+                />
+              </div>
+              <div className="relative p-6 lg:p-8">
+                <h3 className="text-xl lg:text-2xl font-medium tracking-tight text-gray-900 dark:text-white mb-1">
+                  Smart Notifications
+                </h3>
+                <p className="text-sm text-gray-600 dark:text-neutral-400 mb-6 max-w-md">
+                  Stay informed with updates that keep your care team aligned.
+                </p>
+                <div className="min-h-[280px]">
+                  <SkeletonNotifications />
+                </div>
+              </div>
+            </motion.div>
+
+            {/* Routines card - with background */}
+            <motion.div
+              className="relative rounded-2xl overflow-hidden bg-white dark:bg-neutral-900 shadow-lg border border-gray-100 dark:border-neutral-800"
+              initial={{ opacity: 0, y: 20 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              transition={{ duration: 0.4, delay: 0.1 }}
+            >
+              <div className="absolute inset-0">
+                <Image
+                  src="/onboarding-left.png"
+                  alt=""
+                  fill
+                  className="object-cover object-right opacity-[0.04] dark:opacity-[0.03]"
+                />
+              </div>
+              <div className="relative p-6 lg:p-8">
+                <h3 className="text-xl lg:text-2xl font-medium tracking-tight text-gray-900 dark:text-white mb-1">
+                  Routine Management
+                </h3>
+                <p className="text-sm text-gray-600 dark:text-neutral-400 mb-6 max-w-md">
+                  Track daily routines and meds with clear schedules and
+                  reminders.
+                </p>
+                <div className="min-h-[280px]">
+                  <SkeletonRoutines />
+                </div>
+              </div>
+            </motion.div>
+          </div>
         </div>
       </div>
     </div>
   );
 }
 
-const FeatureCard = ({
-  children,
-  className,
-  overflowHidden = false,
-}: {
-  children?: React.ReactNode;
-  className?: string;
-  overflowHidden?: boolean;
-}) => {
-  return (
-    <div
-      className={cn(
-        `p-4 sm:p-8 relative rounded-2xl bg-white dark:bg-neutral-900 shadow-sm hover:shadow-md transition-shadow duration-300`,
-        overflowHidden ? "overflow-hidden" : "overflow-visible",
-        className,
-      )}
-    >
-      {children}
-    </div>
-  );
-};
-
-const FeatureTitle = ({ children }: { children?: React.ReactNode }) => {
-  return (
-    <p className="max-w-5xl mx-auto text-left tracking-tight text-gray-900 dark:text-white text-xl md:text-2xl md:leading-snug font-medium">
-      {children}
-    </p>
-  );
-};
-
-const FeatureDescription = ({ children }: { children?: React.ReactNode }) => {
-  return (
-    <p
-      className={cn(
-        "text-sm md:text-base max-w-4xl text-left mx-auto",
-        "text-gray-600 text-center font-normal leading-relaxed dark:text-neutral-300",
-        "text-left max-w-sm mx-0 md:text-sm my-2",
-      )}
-    >
-      {children}
-    </p>
-  );
-};
-
-export const SkeletonOne = () => {
-  return (
-    <div className="relative h-full w-full overflow-hidden rounded-lg">
-      <div className="w-full h-full bg-white dark:bg-neutral-900 shadow-2xl group rounded-lg overflow-hidden">
-        <div className="relative w-full h-full">
-          <Image
-            src="/feature.png?v=2"
-            alt="Care Team Coordination"
-            fill
-            className="object-cover rounded-lg"
-            unoptimized
-          />
-        </div>
-      </div>
-    </div>
-  );
-};
-
-export const SkeletonTwo = () => {
+function SkeletonNotifications() {
   const notifications = [
     {
       id: "1",
@@ -176,73 +263,61 @@ export const SkeletonTwo = () => {
       icon: Calendar,
       color: "text-red-500",
     },
-    {
-      id: "5",
-      type: "ROUTINE_MISSED",
-      title: "Team Update",
-      message: "Emily updated the care plan",
-      isRead: true,
-      time: "4h ago",
-      icon: Users,
-      color: "text-blue-500",
-    },
   ];
 
   return (
-    <div className="relative flex flex-col gap-3 h-full p-2 overflow-visible">
+    <div className="relative flex flex-col gap-3 overflow-visible">
       {notifications.map((notif, index) => {
         const Icon = notif.icon;
         const zIndex = notifications.length - index;
-        const scale = 1 - index * 0.05;
-        const translateY = index * -8;
-        const opacity = index < 3 ? 1 : 0.6;
+        const scale = 1 - index * 0.04;
+        const translateY = index * -6;
+        const opacity = index < 3 ? 1 : 0.7;
 
         return (
           <motion.div
             key={notif.id}
             className={cn(
-              "p-4 rounded-lg transition-all duration-200",
+              "p-4 rounded-xl transition-all duration-200",
               notif.isRead
-                ? "bg-card opacity-75 shadow-sm"
-                : "bg-gradient-to-br from-rose-50/50 to-pink-50/30 dark:from-rose-950/20 dark:to-pink-950/10 shadow-lg",
+                ? "bg-gray-50/80 dark:bg-neutral-800/80 shadow-sm"
+                : "bg-gradient-to-br from-rose-50/60 to-pink-50/40 dark:from-rose-950/30 dark:to-pink-950/20 shadow-md"
             )}
             style={{
               zIndex,
               transform: `scale(${scale}) translateY(${translateY}px)`,
               opacity,
-              boxShadow:
-                index < 2
-                  ? "0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)"
-                  : undefined,
             }}
-            initial={{ opacity: 0, y: 10, scale: 0.95 }}
-            animate={{ opacity, y: translateY, scale }}
-            transition={{ delay: index * 0.1 }}
-            whileHover={{
-              scale: scale + 0.05,
-            }}
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity, y: translateY }}
+            transition={{ delay: index * 0.08 }}
           >
             <div className="flex items-start gap-3">
               <div className="shrink-0 mt-0.5">
-                <div className={cn("p-2 rounded-md bg-muted", notif.color)}>
+                <div
+                  className={cn(
+                    "p-2 rounded-lg bg-white/80 dark:bg-neutral-800",
+                    notif.color
+                  )}
+                >
                   <Icon className="h-4 w-4" />
                 </div>
               </div>
               <div className="flex-1 min-w-0">
-                <div className="flex items-start justify-between gap-2 mb-1.5">
-                  <h3 className="font-semibold text-sm leading-tight">
+                <div className="flex items-start justify-between gap-2 mb-1">
+                  <h3 className="font-semibold text-sm leading-tight text-gray-900 dark:text-white">
                     {notif.title}
                   </h3>
                   {notif.isRead ? (
-                    <Circle className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                    <Circle className="h-3.5 w-3.5 text-gray-400 shrink-0" />
                   ) : (
                     <div className="w-2.5 h-2.5 rounded-full bg-rose-500 shrink-0 mt-1" />
                   )}
                 </div>
-                <p className="text-sm text-muted-foreground leading-relaxed mb-2">
+                <p className="text-sm text-gray-600 dark:text-neutral-400 leading-relaxed">
                   {notif.message}
                 </p>
-                <span className="text-xs text-muted-foreground">
+                <span className="text-xs text-gray-500 dark:text-neutral-500 mt-1 block">
                   {notif.time}
                 </span>
               </div>
@@ -252,79 +327,28 @@ export const SkeletonTwo = () => {
       })}
     </div>
   );
-};
+}
 
-export const SkeletonThree = () => {
-  // Mock routine data for display
-  const routines = [
-    {
-      name: "Morning Medication",
-      recurrenceDaysOfWeek: [0, 1, 2, 3, 4, 5, 6], // Daily
-      instances: [
-        { entryDate: new Date().toISOString().split("T")[0] },
-        {
-          entryDate: new Date(Date.now() - 86400000)
-            .toISOString()
-            .split("T")[0],
-        },
-        {
-          entryDate: new Date(Date.now() - 172800000)
-            .toISOString()
-            .split("T")[0],
-        },
-        {
-          entryDate: new Date(Date.now() - 259200000)
-            .toISOString()
-            .split("T")[0],
-        },
-        {
-          entryDate: new Date(Date.now() - 345600000)
-            .toISOString()
-            .split("T")[0],
-        },
-      ],
-      color: "emerald",
-    },
-    {
-      name: "Evening Walk",
-      recurrenceDaysOfWeek: [1, 3, 5], // Mon, Wed, Fri
-      instances: [
-        {
-          entryDate: new Date(Date.now() - 86400000)
-            .toISOString()
-            .split("T")[0],
-        },
-        {
-          entryDate: new Date(Date.now() - 259200000)
-            .toISOString()
-            .split("T")[0],
-        },
-      ],
-      color: "blue",
-    },
-  ];
+function SkeletonRoutines() {
+  const routines = useMemo(() => getRoutineMockData(), []);
 
   const getCompletionRate = (routine: (typeof routines)[0]) => {
-    const today = new Date();
-    const startOfWeek = new Date(today);
-    startOfWeek.setDate(today.getDate() - today.getDay());
+    const startOfWeek = new Date();
+    startOfWeek.setDate(startOfWeek.getDate() - startOfWeek.getDay());
     startOfWeek.setHours(0, 0, 0, 0);
-
     const weekDays = routine.recurrenceDaysOfWeek.map((dayIndex) => {
-      const dayDate = new Date(startOfWeek);
-      dayDate.setDate(startOfWeek.getDate() + dayIndex);
-      return dayDate.toISOString().split("T")[0];
+      const d = new Date(startOfWeek);
+      d.setDate(startOfWeek.getDate() + dayIndex);
+      return d.toISOString().split("T")[0];
     });
-
     const completed = weekDays.filter((dayStr) =>
-      routine.instances.some((inst) => inst.entryDate === dayStr),
+      routine.instances.some((inst) => inst.entryDate === dayStr)
     ).length;
-
     return Math.round((completed / routine.recurrenceDaysOfWeek.length) * 100);
   };
 
   return (
-    <div className="relative flex flex-col gap-3 h-full p-2">
+    <div className="relative flex flex-col gap-4">
       {routines.map((routine, index) => {
         const completionRate = getCompletionRate(routine);
         const completedCount = routine.instances.length;
@@ -333,48 +357,45 @@ export const SkeletonThree = () => {
         return (
           <motion.div
             key={index}
-            className={cn(
-              "rounded-lg bg-card shadow-sm hover:shadow-md transition-all duration-200 group",
-              index === 0 ? "p-3" : "p-4",
-            )}
+            className="rounded-xl bg-gray-50/80 dark:bg-neutral-800/80 p-4 shadow-sm border border-gray-100 dark:border-neutral-700/50"
             initial={{ opacity: 0, x: -10 }}
             animate={{ opacity: 1, x: 0 }}
-            transition={{ delay: index * 0.15 }}
+            transition={{ delay: index * 0.12 }}
           >
             <div className="flex items-start gap-4">
               <div className="shrink-0 flex flex-col items-center">
                 <RoutineCircularChart
                   recurrenceDaysOfWeek={routine.recurrenceDaysOfWeek}
                   instances={routine.instances}
-                  size={index === 0 ? 70 : 90}
-                  barWidth={index === 0 ? 7 : 9}
+                  size={index === 0 ? 64 : 80}
+                  barWidth={index === 0 ? 6 : 8}
                 />
-                <p className="text-[10px] text-muted-foreground mt-1.5">
+                <p className="text-[10px] text-gray-500 dark:text-neutral-500 mt-1.5">
                   this week
                 </p>
               </div>
-              <div className="flex-1 min-w-0 pt-1">
-                <h3 className="font-semibold text-sm leading-tight mb-1.5 group-hover:text-foreground transition-colors">
+              <div className="flex-1 min-w-0 pt-0.5">
+                <h3 className="font-semibold text-sm text-gray-900 dark:text-white leading-tight mb-2">
                   {routine.name}
                 </h3>
-                <div className={cn("space-y-1.5", index === 1 && "space-y-2")}>
+                <div className="space-y-1.5">
                   <div className="flex items-center gap-2">
-                    <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden">
+                    <div className="flex-1 h-2 bg-gray-200 dark:bg-neutral-700 rounded-full overflow-hidden">
                       <motion.div
                         className="h-full bg-emerald-500 rounded-full"
                         initial={{ width: 0 }}
                         animate={{ width: `${completionRate}%` }}
                         transition={{
-                          delay: index * 0.15 + 0.2,
+                          delay: index * 0.12 + 0.2,
                           duration: 0.5,
                         }}
                       />
                     </div>
-                    <span className="text-[10px] font-medium text-muted-foreground whitespace-nowrap">
+                    <span className="text-xs font-medium text-gray-600 dark:text-neutral-400 whitespace-nowrap">
                       {completedCount}/{totalDays}
                     </span>
                   </div>
-                  <p className="text-xs text-muted-foreground">
+                  <p className="text-xs text-gray-500 dark:text-neutral-500">
                     {routine.recurrenceDaysOfWeek.length === 7
                       ? "Daily"
                       : `${routine.recurrenceDaysOfWeek.length}x per week`}
@@ -387,65 +408,4 @@ export const SkeletonThree = () => {
       })}
     </div>
   );
-};
-
-export const SkeletonFour = () => {
-  return (
-    <div className="h-full w-full flex flex-col items-center justify-center relative bg-transparent dark:bg-transparent overflow-visible">
-      <div className="relative w-full h-full flex items-center justify-center">
-        <Globe className="relative" />
-      </div>
-    </div>
-  );
-};
-
-export const Globe = ({ className }: { className?: string }) => {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-
-  useEffect(() => {
-    let phi = 0;
-
-    if (!canvasRef.current) return;
-
-    const globe = createGlobe(canvasRef.current, {
-      devicePixelRatio: 2,
-      width: 600 * 2,
-      height: 600 * 2,
-      phi: 0,
-      theta: 0,
-      dark: 1,
-      diffuse: 1.2,
-      mapSamples: 16000,
-      mapBrightness: 6,
-      baseColor: [0.3, 0.3, 0.3],
-      markerColor: [0.1, 0.8, 1],
-      glowColor: [1, 1, 1],
-      markers: [
-        { location: [37.7595, -122.4367], size: 0.03 },
-        { location: [40.7128, -74.006], size: 0.1 },
-      ],
-      onRender: (state) => {
-        state.phi = phi;
-        phi += 0.01;
-      },
-    });
-
-    return () => {
-      globe.destroy();
-    };
-  }, []);
-
-  return (
-    <canvas
-      ref={canvasRef}
-      style={{
-        width: "100%",
-        height: "100%",
-        maxWidth: "100%",
-        maxHeight: "100%",
-        aspectRatio: 1,
-      }}
-      className={className}
-    />
-  );
-};
+}

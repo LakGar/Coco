@@ -1,102 +1,114 @@
-'use client'
+"use client";
 
-import { useState, useEffect } from 'react'
-import { useRouter } from 'next/navigation'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
+import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   Field,
   FieldLabel,
   FieldContent,
   FieldError,
   FieldGroup,
-} from '@/components/ui/field'
+} from "@/components/ui/field";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '@/components/ui/select'
-import { Plus, X, ChevronRight, ChevronLeft, Check, Brain } from 'lucide-react'
-import Image from 'next/image'
-import { toast } from 'sonner'
-import { Spinner } from '@/components/ui/spinner'
-import { ROUTINE_PRESETS, type PresetItem } from '@/lib/routine-presets'
-import { Checkbox } from '@/components/ui/checkbox'
+} from "@/components/ui/select";
+import { Plus, X, ChevronRight, ChevronLeft, Check, Brain } from "lucide-react";
+import Image from "next/image";
+import { toast } from "sonner";
+import { Spinner } from "@/components/ui/spinner";
+import { ROUTINE_PRESETS, type PresetItem } from "@/lib/routine-presets";
+import { Checkbox } from "@/components/ui/checkbox";
 
-type UserRole = 'CAREGIVER' | 'FAMILY' | 'PHYSICIAN' | 'PATIENT'
-type TeamRole = 'CAREGIVER' | 'FAMILY' | 'PHYSICIAN'
-type AccessLevel = 'FULL' | 'READ_ONLY'
+type UserRole = "CAREGIVER" | "FAMILY" | "PHYSICIAN" | "PATIENT";
+type TeamRole = "CAREGIVER" | "FAMILY" | "PHYSICIAN";
+type AccessLevel = "FULL" | "READ_ONLY";
 
 interface TeamMember {
-  id: string
-  email: string
-  name?: string // Optional name for the invited member
-  role: TeamRole
-  accessLevel: AccessLevel
+  id: string;
+  email: string;
+  name?: string; // Optional name for the invited member
+  role: TeamRole;
+  accessLevel: AccessLevel;
 }
 
 export default function OnboardingPage() {
-  const router = useRouter()
-  const [step, setStep] = useState(1)
-  const [isExistingTeamMember, setIsExistingTeamMember] = useState(false)
-  const [checkingTeamStatus, setCheckingTeamStatus] = useState(true)
+  const router = useRouter();
+  const [step, setStep] = useState(1);
+  const [isExistingTeamMember, setIsExistingTeamMember] = useState(false);
+  const [checkingTeamStatus, setCheckingTeamStatus] = useState(true);
   const [formData, setFormData] = useState({
-    firstName: '',
-    lastName: '',
-    role: '' as UserRole | '',
-    city: '',
-    state: '',
-    patientName: '',
-    patientEmail: '',
+    firstName: "",
+    lastName: "",
+    role: "" as UserRole | "",
+    city: "",
+    state: "",
+    patientName: "",
+    patientEmail: "",
     teamMembers: [] as TeamMember[],
     journalQuestions: [] as string[], // ADL and other journal questions
-  })
+  });
 
-  const [errors, setErrors] = useState<Record<string, string>>({})
+  const [errors, setErrors] = useState<Record<string, string>>({});
 
   // Check if user is already a team member (from invite acceptance)
   useEffect(() => {
     const checkTeamStatus = async () => {
       try {
-        const response = await fetch('/api/check-onboarding')
+        const response = await fetch("/api/check-onboarding");
         if (response.ok) {
-          const data = await response.json()
-          setIsExistingTeamMember(data.isExistingTeamMember || false)
+          const data = await response.json();
+          setIsExistingTeamMember(data.isExistingTeamMember || false);
         }
-        setCheckingTeamStatus(false)
+        setCheckingTeamStatus(false);
       } catch (error) {
-        console.error('Error checking team status:', error)
-        setCheckingTeamStatus(false)
+        console.error("Error checking team status:", error);
+        setCheckingTeamStatus(false);
       }
-    }
-    checkTeamStatus()
-  }, [])
+    };
+    checkTeamStatus();
+  }, []);
+
+  // Scroll to top when step changes so the next step content is visible
+  useEffect(() => {
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }, [step]);
 
   const validateStep = (stepNumber: number): boolean => {
-    const newErrors: Record<string, string> = {}
+    const newErrors: Record<string, string> = {};
 
     if (stepNumber === 1) {
-      if (!formData.firstName.trim()) newErrors.firstName = 'First name is required'
-      if (!formData.lastName.trim()) newErrors.lastName = 'Last name is required'
+      if (!formData.firstName.trim())
+        newErrors.firstName = "First name is required";
+      if (!formData.lastName.trim())
+        newErrors.lastName = "Last name is required";
     }
 
     if (stepNumber === 2) {
-      if (!formData.role) newErrors.role = 'Please select a role'
+      if (!formData.role) newErrors.role = "Please select a role";
     }
 
     if (stepNumber === 3) {
-      if (!formData.city.trim()) newErrors.city = 'City is required'
-      if (!formData.state.trim()) newErrors.state = 'State is required'
+      if (!formData.city.trim()) newErrors.city = "City is required";
+      if (!formData.state.trim()) newErrors.state = "State is required";
     }
 
     // Step 4 validation only if user is creating a new team
     if (stepNumber === 4 && !isExistingTeamMember) {
-      if (!formData.patientName.trim()) newErrors.patientName = 'Patient name is required'
-      if (!formData.patientEmail.trim()) newErrors.patientEmail = 'Patient email is required'
-      if (formData.patientEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.patientEmail)) {
-        newErrors.patientEmail = 'Please enter a valid email'
+      if (!formData.patientName.trim())
+        newErrors.patientName = "Patient name is required";
+      if (!formData.patientEmail.trim())
+        newErrors.patientEmail = "Patient email is required";
+      if (
+        formData.patientEmail &&
+        !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.patientEmail)
+      ) {
+        newErrors.patientEmail = "Please enter a valid email";
       }
     }
 
@@ -105,59 +117,63 @@ export default function OnboardingPage() {
       // Journal questions are optional, but we can show a warning if none selected
     }
 
-    setErrors(newErrors)
-    return Object.keys(newErrors).length === 0
-  }
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
 
   const handleNext = () => {
     if (validateStep(step)) {
-      setStep(step + 1)
+      setStep(step + 1);
     }
-  }
+  };
 
   const handleBack = () => {
-    setStep(step - 1)
-  }
+    setStep(step - 1);
+  };
 
   const addTeamMember = () => {
     const newMember: TeamMember = {
       id: Date.now().toString(),
-      email: '',
-      role: 'CAREGIVER',
-      accessLevel: 'FULL',
-    }
+      email: "",
+      role: "CAREGIVER",
+      accessLevel: "FULL",
+    };
     setFormData({
       ...formData,
       teamMembers: [...formData.teamMembers, newMember],
-    })
-  }
+    });
+  };
 
   const removeTeamMember = (id: string) => {
     setFormData({
       ...formData,
       teamMembers: formData.teamMembers.filter((m) => m.id !== id),
-    })
-  }
+    });
+  };
 
-  const updateTeamMember = (id: string, field: keyof TeamMember, value: string) => {
+  const updateTeamMember = (
+    id: string,
+    field: keyof TeamMember,
+    value: string
+  ) => {
     setFormData({
       ...formData,
       teamMembers: formData.teamMembers.map((m) =>
         m.id === id ? { ...m, [field]: value } : m
       ),
-    })
-  }
+    });
+  };
 
   const handleSubmit = async () => {
     // Validate based on whether user is creating a team or just updating profile
-    const stepToValidate = isExistingTeamMember ? 3 : 5
-    if (!validateStep(stepToValidate)) return
+    const stepToValidate = isExistingTeamMember ? 3 : 5;
+    if (!validateStep(stepToValidate)) return;
 
     toast.promise(
-      fetch('/api/onboarding', {
-        method: 'POST',
+      fetch("/api/onboarding", {
+        method: "POST",
         headers: {
-          'Content-Type': 'application/json',
+          "Content-Type": "application/json",
         },
         body: JSON.stringify({
           firstName: formData.firstName,
@@ -167,32 +183,38 @@ export default function OnboardingPage() {
           state: formData.state,
           // Only include patient info if creating a new team
           patientName: isExistingTeamMember ? undefined : formData.patientName,
-          patientEmail: isExistingTeamMember ? undefined : formData.patientEmail,
+          patientEmail: isExistingTeamMember
+            ? undefined
+            : formData.patientEmail,
           teamMembers: isExistingTeamMember ? [] : formData.teamMembers,
           journalQuestions: formData.journalQuestions, // Include journal questions
         }),
-      }).then(async (response) => {
-        if (!response.ok) {
-          const error = await response.json()
-          throw new Error(error.error || 'Failed to complete onboarding')
-        }
-        return response.json()
-      }).then((data) => {
-        // Redirect to dashboard on success
-        setTimeout(() => {
-          router.push('/dashboard')
-        }, 1000)
-        return data
-      }),
+      })
+        .then(async (response) => {
+          if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.error || "Failed to complete onboarding");
+          }
+          return response.json();
+        })
+        .then((data) => {
+          // Redirect to dashboard on success
+          setTimeout(() => {
+            router.push("/dashboard");
+          }, 1000);
+          return data;
+        }),
       {
-        loading: isExistingTeamMember ? 'Updating your profile...' : 'Setting up your care team...',
-        success: isExistingTeamMember 
-          ? 'Profile updated! Redirecting to dashboard...'
-          : 'Onboarding completed! Redirecting to dashboard...',
-        error: (error) => error.message || 'Failed to complete onboarding',
+        loading: isExistingTeamMember
+          ? "Updating your profile..."
+          : "Setting up your care team...",
+        success: isExistingTeamMember
+          ? "Profile updated! Redirecting to dashboard..."
+          : "Onboarding completed! Redirecting to dashboard...",
+        error: (error) => error.message || "Failed to complete onboarding",
       }
-    )
-  }
+    );
+  };
 
   const toggleJournalQuestion = (question: string) => {
     setFormData((prev) => ({
@@ -200,35 +222,59 @@ export default function OnboardingPage() {
       journalQuestions: prev.journalQuestions.includes(question)
         ? prev.journalQuestions.filter((q) => q !== question)
         : [...prev.journalQuestions, question],
-    }))
-  }
+    }));
+  };
 
   const steps = [
-    { number: 1, title: 'Personal Information', description: 'Tell us about yourself' },
-    { number: 2, title: 'Your Role', description: 'What role do you play?' },
-    { number: 3, title: 'Location', description: 'Where are you located?' },
-    ...(isExistingTeamMember ? [] : [
-      { number: 4, title: 'Create Team', description: 'Set up your care team' },
-      { number: 5, title: 'Daily Journal', description: 'Set up your daily journal questions' },
-    ]),
-  ]
+    {
+      number: 1,
+      title: "Personal Information",
+      description: "Tell us about yourself",
+    },
+    { number: 2, title: "Your Role", description: "What role do you play?" },
+    { number: 3, title: "Location", description: "Where are you located?" },
+    ...(isExistingTeamMember
+      ? []
+      : [
+          {
+            number: 4,
+            title: "Create Team",
+            description: "Set up your care team",
+          },
+          {
+            number: 5,
+            title: "Daily Journal",
+            description: `Set up ${formData.patientName}'s daily journal questions`,
+          },
+        ]),
+  ];
 
-  const progress = (step / steps.length) * 100
+  const progress = (step / steps.length) * 100;
 
   return (
-    <div className="min-h-screen min-w-screen bg-[#f6e9cf]/10 overflow-hidden p-4 relative">
-        <div className="fixed -top-8 -left-10 hidden md:block z-0 pointer-events-none">
-            <Image src="/onboarding-left.png" alt="Coco" width={300} height={300} />
-        </div>
-        <div className="fixed -top-8 -left-10 block md:hidden z-0 pointer-events-none">
-            <Image src="/onboarding-left.png" alt="Coco" width={200} height={200} />
-        </div>
-        <div className="fixed -bottom-10 right-0 hidden md:block z-0 pointer-events-none">
-            <Image src="/onboarding-right.png" alt="Coco" width={300} height={300} />
-        </div>
-        <div className="fixed -bottom-10 right-0 block md:hidden z-0 pointer-events-none">
-            <Image src="/onboarding-right.png" alt="Coco" width={200} height={200} />
-        </div>
+    <div className="min-h-screen max-w-screen  bg-[#f6e9cf]/10 overflow-hidden p-4 relative overflow-y-hidden">
+      <div className="fixed -top-8 -left-10 hidden md:block z-0 pointer-events-none">
+        <Image src="/onboarding-left.png" alt="Coco" width={300} height={300} />
+      </div>
+      <div className="fixed -top-8 -left-10 block md:hidden z-0 pointer-events-none">
+        <Image src="/onboarding-left.png" alt="Coco" width={200} height={200} />
+      </div>
+      <div className="fixed -bottom-10 right-0 hidden md:block z-0 pointer-events-none">
+        <Image
+          src="/onboarding-right.png"
+          alt="Coco"
+          width={300}
+          height={300}
+        />
+      </div>
+      <div className="fixed -bottom-10 right-0 block md:hidden z-0 pointer-events-none">
+        <Image
+          src="/onboarding-right.png"
+          alt="Coco"
+          width={200}
+          height={200}
+        />
+      </div>
 
       {/* bottom Left Logo */}
       {/* <div className="absolute bottom-6 left-6 hodden md:flex items-center gap-3 z-1">
@@ -239,14 +285,14 @@ export default function OnboardingPage() {
         </div>
       </div> */}
 
-       <div className="max-w-4xl mx-auto px-6 py-12 sm:px-6 lg:px-8 flex flex-col min-h-screen justify-center relative z-10">
+      <div className="max-w-4xl mx-auto px-6 py-12 sm:px-6 lg:px-8 flex flex-col min-h-screen justify-center relative z-10">
         {/* Header */}
         <div className="my-12 text-left md:text-center z-1">
           <h1 className="text-2xl md:text-4xl font-bold tracking-tight mb-1 md:mb-3">
-            Welcome! Let's get you set up
+            Welcome! Let&apos;s get you set up
           </h1>
           <p className="text-muted-foreground text-sm md:text-lg">
-            We'll guide you through setting up your care team
+            We&apos;ll guide you through setting up your care team
           </p>
         </div>
 
@@ -268,7 +314,9 @@ export default function OnboardingPage() {
                 )}
                 <span
                   className={`text-xs font-medium  hidden sm:block ${
-                    step >= s.number ? 'text-foreground' : 'text-muted-foreground'
+                    step >= s.number
+                      ? "text-foreground"
+                      : "text-muted-foreground"
                   }`}
                 >
                   {s.title}
@@ -291,9 +339,11 @@ export default function OnboardingPage() {
           {step === 1 && (
             <div className="space-y-8 animate-in fade-in slide-in-from-right-4 duration-300">
               <div>
-                <h2 className="text-2xl font-semibold mb-2">What's your name?</h2>
+                <h2 className="text-2xl font-semibold mb-2">
+                  What&apos;s your name?
+                </h2>
                 <p className="text-muted-foreground">
-                  We'll use this to personalize your experience
+                  We&apos;ll use this to personalize your experience
                 </p>
               </div>
               <FieldGroup className="space-y-6">
@@ -304,13 +354,18 @@ export default function OnboardingPage() {
                       <Input
                         value={formData.firstName}
                         onChange={(e) =>
-                          setFormData({ ...formData, firstName: e.target.value })
+                          setFormData({
+                            ...formData,
+                            firstName: e.target.value,
+                          })
                         }
                         placeholder="John"
                         aria-invalid={!!errors.firstName}
                         className="h-11"
                       />
-                      {errors.firstName && <FieldError>{errors.firstName}</FieldError>}
+                      {errors.firstName && (
+                        <FieldError>{errors.firstName}</FieldError>
+                      )}
                     </FieldContent>
                   </Field>
 
@@ -326,7 +381,9 @@ export default function OnboardingPage() {
                         aria-invalid={!!errors.lastName}
                         className="h-11"
                       />
-                      {errors.lastName && <FieldError>{errors.lastName}</FieldError>}
+                      {errors.lastName && (
+                        <FieldError>{errors.lastName}</FieldError>
+                      )}
                     </FieldContent>
                   </Field>
                 </div>
@@ -338,7 +395,9 @@ export default function OnboardingPage() {
           {step === 2 && (
             <div className="space-y-8 animate-in fade-in slide-in-from-right-4 duration-300">
               <div>
-                <h2 className="text-2xl font-semibold mb-2">What's your role?</h2>
+                <h2 className="text-2xl font-semibold mb-2">
+                  What&apos;s your role?
+                </h2>
                 <p className="text-muted-foreground">
                   This helps us customize your experience
                 </p>
@@ -353,7 +412,10 @@ export default function OnboardingPage() {
                         setFormData({ ...formData, role: value as UserRole })
                       }
                     >
-                      <SelectTrigger aria-invalid={!!errors.role} className="h-11">
+                      <SelectTrigger
+                        aria-invalid={!!errors.role}
+                        className="h-11"
+                      >
                         <SelectValue placeholder="Choose your role" />
                       </SelectTrigger>
                       <SelectContent>
@@ -361,14 +423,15 @@ export default function OnboardingPage() {
                         <SelectItem value="FAMILY">Family Member</SelectItem>
                         <SelectItem value="PHYSICIAN">Physician</SelectItem>
                         <SelectItem value="PATIENT" disabled>
-                          Patient 
+                          Patient
                         </SelectItem>
                       </SelectContent>
                     </Select>
                     {errors.role && <FieldError>{errors.role}</FieldError>}
-                    {formData.role === 'PATIENT' && (
+                    {formData.role === "PATIENT" && (
                       <p className="text-sm text-muted-foreground mt-2">
-                        Note: Patient accounts are usually created by team members.
+                        Note: Patient accounts are usually created by team
+                        members.
                       </p>
                     )}
                   </FieldContent>
@@ -381,7 +444,9 @@ export default function OnboardingPage() {
           {step === 3 && (
             <div className="space-y-8 animate-in fade-in slide-in-from-right-4 duration-300">
               <div>
-                <h2 className="text-2xl font-semibold mb-2">Where are you located?</h2>
+                <h2 className="text-2xl font-semibold mb-2">
+                  Where are you located?
+                </h2>
                 <p className="text-muted-foreground">
                   This helps us connect you with local resources
                 </p>
@@ -428,7 +493,9 @@ export default function OnboardingPage() {
           {step === 4 && (
             <div className="space-y-10 animate-in fade-in slide-in-from-right-4 duration-300">
               <div>
-                <h2 className="text-2xl font-semibold mb-2">Create Your Care Team</h2>
+                <h2 className="text-2xl font-semibold mb-2">
+                  Create Your Care Team
+                </h2>
                 <p className="text-muted-foreground">
                   Add the patient and invite team members to collaborate
                 </p>
@@ -436,12 +503,6 @@ export default function OnboardingPage() {
 
               {/* Patient Section */}
               <div className="space-y-6 pt-6 border-t">
-                <div>
-                  <h3 className="text-lg font-semibold mb-1">Patient Information</h3>
-                  <p className="text-sm text-muted-foreground">
-                    Who is this care team for?
-                  </p>
-                </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                   <Field>
                     <FieldLabel>Patient Name</FieldLabel>
@@ -449,13 +510,18 @@ export default function OnboardingPage() {
                       <Input
                         value={formData.patientName}
                         onChange={(e) =>
-                          setFormData({ ...formData, patientName: e.target.value })
+                          setFormData({
+                            ...formData,
+                            patientName: e.target.value,
+                          })
                         }
                         placeholder="Patient's full name"
                         aria-invalid={!!errors.patientName}
                         className="h-11"
                       />
-                      {errors.patientName && <FieldError>{errors.patientName}</FieldError>}
+                      {errors.patientName && (
+                        <FieldError>{errors.patientName}</FieldError>
+                      )}
                     </FieldContent>
                   </Field>
 
@@ -466,13 +532,18 @@ export default function OnboardingPage() {
                         type="email"
                         value={formData.patientEmail}
                         onChange={(e) =>
-                          setFormData({ ...formData, patientEmail: e.target.value })
+                          setFormData({
+                            ...formData,
+                            patientEmail: e.target.value,
+                          })
                         }
                         placeholder="patient@example.com"
                         aria-invalid={!!errors.patientEmail}
                         className="h-11"
                       />
-                      {errors.patientEmail && <FieldError>{errors.patientEmail}</FieldError>}
+                      {errors.patientEmail && (
+                        <FieldError>{errors.patientEmail}</FieldError>
+                      )}
                     </FieldContent>
                   </Field>
                 </div>
@@ -521,15 +592,20 @@ export default function OnboardingPage() {
                             <FieldLabel>Name (Optional)</FieldLabel>
                             <FieldContent>
                               <Input
-                                value={member.name || ''}
+                                value={member.name || ""}
                                 onChange={(e) =>
-                                  updateTeamMember(member.id, 'name', e.target.value)
+                                  updateTeamMember(
+                                    member.id,
+                                    "name",
+                                    e.target.value
+                                  )
                                 }
                                 placeholder="Team member's name"
                                 className="h-11"
                               />
                               <p className="text-xs text-muted-foreground mt-1">
-                                We'll use this to personalize their invite email
+                                We&apos;ll use this to personalize their invite
+                                email
                               </p>
                             </FieldContent>
                           </Field>
@@ -541,7 +617,11 @@ export default function OnboardingPage() {
                                 type="email"
                                 value={member.email}
                                 onChange={(e) =>
-                                  updateTeamMember(member.id, 'email', e.target.value)
+                                  updateTeamMember(
+                                    member.id,
+                                    "email",
+                                    e.target.value
+                                  )
                                 }
                                 placeholder="member@example.com"
                                 className="h-11"
@@ -556,16 +636,22 @@ export default function OnboardingPage() {
                                 <Select
                                   value={member.role}
                                   onValueChange={(value: string) =>
-                                    updateTeamMember(member.id, 'role', value)
+                                    updateTeamMember(member.id, "role", value)
                                   }
                                 >
                                   <SelectTrigger className="h-11">
                                     <SelectValue />
                                   </SelectTrigger>
                                   <SelectContent>
-                                    <SelectItem value="CAREGIVER">Caregiver</SelectItem>
-                                    <SelectItem value="FAMILY">Family</SelectItem>
-                                    <SelectItem value="PHYSICIAN">Physician</SelectItem>
+                                    <SelectItem value="CAREGIVER">
+                                      Professional
+                                    </SelectItem>
+                                    <SelectItem value="FAMILY">
+                                      Family Member
+                                    </SelectItem>
+                                    <SelectItem value="PHYSICIAN">
+                                      Physician
+                                    </SelectItem>
                                   </SelectContent>
                                 </Select>
                               </FieldContent>
@@ -577,15 +663,23 @@ export default function OnboardingPage() {
                                 <Select
                                   value={member.accessLevel}
                                   onValueChange={(value: string) =>
-                                    updateTeamMember(member.id, 'accessLevel', value)
+                                    updateTeamMember(
+                                      member.id,
+                                      "accessLevel",
+                                      value
+                                    )
                                   }
                                 >
                                   <SelectTrigger className="h-11">
                                     <SelectValue />
                                   </SelectTrigger>
                                   <SelectContent>
-                                    <SelectItem value="FULL">Full Access</SelectItem>
-                                    <SelectItem value="READ_ONLY">Read Only</SelectItem>
+                                    <SelectItem value="FULL">
+                                      Full Access
+                                    </SelectItem>
+                                    <SelectItem value="READ_ONLY">
+                                      Read Only
+                                    </SelectItem>
                                   </SelectContent>
                                 </Select>
                               </FieldContent>
@@ -593,17 +687,16 @@ export default function OnboardingPage() {
                           </div>
                         </div>
                         <div className="absolute top-3 right-3">
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => removeTeamMember(member.id)}
-                          className="ml-4 shrink-0"
-                        >
-                          <X className="h-4 w-4" />
-                        </Button>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => removeTeamMember(member.id)}
+                            className="ml-4 shrink-0"
+                          >
+                            <X className="h-4 w-4" />
+                          </Button>
                         </div>
-                        
                       </div>
                     </div>
                   ))}
@@ -614,7 +707,8 @@ export default function OnboardingPage() {
                         No team members added yet
                       </p>
                       <p className="text-sm text-muted-foreground">
-                        Click "Add Member" to invite someone to your care team
+                        Click &quot;Add Member&quot; to invite someone to your
+                        care team
                       </p>
                     </div>
                   )}
@@ -624,9 +718,11 @@ export default function OnboardingPage() {
               {/* Team Name Preview */}
               {formData.patientName && (
                 <div className="p-4 rounded-lg bg-primary/5 border border-primary/20">
-                  <p className="text-sm font-medium text-primary mb-1">Team Name</p>
+                  <p className="text-sm font-medium text-primary mb-1">
+                    Team Name
+                  </p>
                   <p className="text-lg font-semibold">
-                    {formData.patientName}'s Care Team
+                    {formData.patientName}&apos;s Care Team
                   </p>
                 </div>
               )}
@@ -637,7 +733,9 @@ export default function OnboardingPage() {
           {step === 5 && !isExistingTeamMember && (
             <div className="space-y-8 animate-in fade-in slide-in-from-right-4 duration-300">
               <div>
-                <h2 className="text-2xl font-semibold mb-2">Set Up Your Daily Journal</h2>
+                <h2 className="text-2xl font-semibold mb-2">
+                  Set Up Your Daily Journal
+                </h2>
                 <p className="text-muted-foreground">
                   Select questions to track daily. You can add more later.
                 </p>
@@ -648,38 +746,53 @@ export default function OnboardingPage() {
                 <div className="space-y-4">
                   <div className="flex items-center gap-2">
                     <Brain className="h-5 w-5 text-primary" />
-                    <h3 className="text-lg font-semibold">Activities of Daily Living (ADL)</h3>
+                    <h3 className="text-lg font-semibold">
+                      Activities of Daily Living (ADL)
+                    </h3>
                   </div>
                   <p className="text-sm text-muted-foreground">
                     Track essential daily activities for care planning
                   </p>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    {ROUTINE_PRESETS["Activities of Daily Living (ADL)"].map((item) => (
-                      <div
-                        key={item.id}
-                        className="flex items-center space-x-2 p-3 rounded-lg border hover:bg-muted/50 transition-colors cursor-pointer"
-                        onClick={() => toggleJournalQuestion(item.label)}
-                      >
-                        <Checkbox
-                          checked={formData.journalQuestions.includes(item.label)}
-                          onCheckedChange={() => toggleJournalQuestion(item.label)}
-                        />
-                        <label className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer flex-1">
-                          {item.label}
-                        </label>
-                      </div>
-                    ))}
+                    {ROUTINE_PRESETS["Activities of Daily Living (ADL)"].map(
+                      (item) => (
+                        <div
+                          key={item.id}
+                          className="flex items-center space-x-2 p-3 rounded-lg border hover:bg-muted/50 transition-colors cursor-pointer"
+                          onClick={() => toggleJournalQuestion(item.label)}
+                        >
+                          <Checkbox
+                            checked={formData.journalQuestions.includes(
+                              item.label
+                            )}
+                            onCheckedChange={() =>
+                              toggleJournalQuestion(item.label)
+                            }
+                          />
+                          <label className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer flex-1">
+                            {item.label}
+                          </label>
+                        </div>
+                      )
+                    )}
                   </div>
                 </div>
 
                 {/* Other Categories - Collapsed by default */}
                 <div className="space-y-4 pt-4 border-t">
-                  <h3 className="text-lg font-semibold">Additional Questions (Optional)</h3>
+                  <h3 className="text-lg font-semibold">
+                    Additional Questions (Optional)
+                  </h3>
                   {Object.entries(ROUTINE_PRESETS)
-                    .filter(([category]) => category !== "Activities of Daily Living (ADL)")
+                    .filter(
+                      ([category]) =>
+                        category !== "Activities of Daily Living (ADL)"
+                    )
                     .map(([category, items]) => (
                       <div key={category} className="space-y-3">
-                        <h4 className="text-sm font-medium text-muted-foreground">{category}</h4>
+                        <h4 className="text-sm font-medium text-muted-foreground">
+                          {category}
+                        </h4>
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                           {items.slice(0, 4).map((item) => (
                             <div
@@ -688,8 +801,12 @@ export default function OnboardingPage() {
                               onClick={() => toggleJournalQuestion(item.label)}
                             >
                               <Checkbox
-                                checked={formData.journalQuestions.includes(item.label)}
-                                onCheckedChange={() => toggleJournalQuestion(item.label)}
+                                checked={formData.journalQuestions.includes(
+                                  item.label
+                                )}
+                                onCheckedChange={() =>
+                                  toggleJournalQuestion(item.label)
+                                }
                               />
                               <label className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer flex-1">
                                 {item.label}
@@ -704,7 +821,9 @@ export default function OnboardingPage() {
                 {formData.journalQuestions.length > 0 && (
                   <div className="p-4 rounded-lg bg-primary/5 border border-primary/20">
                     <p className="text-sm font-medium text-primary mb-1">
-                      {formData.journalQuestions.length} question{formData.journalQuestions.length !== 1 ? 's' : ''} selected
+                      {formData.journalQuestions.length} question
+                      {formData.journalQuestions.length !== 1 ? "s" : ""}{" "}
+                      selected
                     </p>
                     <p className="text-xs text-muted-foreground">
                       These will be included in your daily journal routine
@@ -728,13 +847,23 @@ export default function OnboardingPage() {
               Back
             </Button>
             {step < (isExistingTeamMember ? 3 : 5) ? (
-              <Button type="button" onClick={handleNext} className="gap-2" size="lg">
+              <Button
+                type="button"
+                onClick={handleNext}
+                className="gap-2"
+                size="lg"
+              >
                 Next
                 <ChevronRight className="h-4 w-4" />
               </Button>
             ) : (
-              <Button type="button" onClick={handleSubmit} size="lg" className="gap-2">
-                {isExistingTeamMember ? 'Complete Profile' : 'Complete Setup'}
+              <Button
+                type="button"
+                onClick={handleSubmit}
+                size="lg"
+                className="gap-2"
+              >
+                {isExistingTeamMember ? "Complete Profile" : "Complete Setup"}
                 <Check className="h-4 w-4" />
               </Button>
             )}
@@ -742,5 +871,5 @@ export default function OnboardingPage() {
         </div>
       </div>
     </div>
-  )
+  );
 }

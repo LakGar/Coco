@@ -5,6 +5,7 @@ import {
   Settings2,
   House,
   List,
+  Pill,
   Users,
   FileText,
   FileUser,
@@ -140,6 +141,11 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         ],
       },
       {
+        title: "Medications",
+        url: "/dashboard/medications",
+        icon: Pill,
+      },
+      {
         title: "Routines",
         url: "/dashboard/routines",
         icon: Repeat,
@@ -186,7 +192,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         icon: Settings2,
       },
     ],
-    [],
+    []
   );
 
   // Dynamic documents based on active team

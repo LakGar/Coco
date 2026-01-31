@@ -65,10 +65,10 @@ const thirdColumn = testimonials.slice(6, 9);
 
 export default function Testimonials() {
   return (
-    <section className="py-32 px-4 sm:px-6 lg:px-8 bg-gradient-to-b from-gray-50 via-white to-gray-50 relative overflow-hidden">
+    <section className="py-32 px-4 sm:px-6 lg:px-8 bg-gradient-to-b from-white via-white to-gray-50 relative overflow-hidden">
       {/* Background blur elements */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute top-0 left-1/3 w-[500px] h-[500px] bg-amber-100/30 rounded-full blur-3xl" />
+        <div className="absolute top-20 left-1/3 w-[500px] h-[500px] bg-amber-100/30 rounded-full blur-3xl" />
         <div className="absolute bottom-0 right-1/3 w-[500px] h-[500px] bg-rose-100/30 rounded-full blur-3xl" />
       </div>
 

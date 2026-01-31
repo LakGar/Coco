@@ -1,31 +1,28 @@
-import { auth, currentUser } from '@clerk/nextjs/server'
-import { prisma } from '@/lib/prisma'
-import { NextResponse } from 'next/server'
-import { randomBytes } from 'crypto'
-import { sendInviteEmail } from '@/lib/email'
-import { log, loggerUtils } from '@/lib/logger'
-import { createInternalErrorResponse } from '@/lib/error-handler'
+import { auth, currentUser } from "@clerk/nextjs/server";
+import { prisma } from "@/lib/prisma";
+import { NextResponse } from "next/server";
+import { randomBytes } from "crypto";
+import { sendInviteEmail } from "@/lib/email";
+import { log, loggerUtils } from "@/lib/logger";
+import { createInternalErrorResponse } from "@/lib/error-handler";
 
 export async function POST(req: Request) {
   try {
-    const { userId } = await auth()
+    const { userId } = await auth();
 
     if (!userId) {
-      return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      )
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const clerkUser = await currentUser()
+    const clerkUser = await currentUser();
     if (!clerkUser) {
       return NextResponse.json(
-        { error: 'User not found in Clerk' },
+        { error: "User not found in Clerk" },
         { status: 404 }
-      )
+      );
     }
 
-    const body = await req.json()
+    const body = await req.json();
     const {
       firstName,
       lastName,
@@ -36,14 +33,14 @@ export async function POST(req: Request) {
       patientEmail,
       teamMembers,
       journalQuestions,
-    } = body
+    } = body;
 
     // Validate required fields
     if (!firstName || !lastName || !role || !city || !state) {
       return NextResponse.json(
-        { error: 'Missing required fields' },
+        { error: "Missing required fields" },
         { status: 400 }
-      )
+      );
     }
 
     // Patient info is only required if user is creating a new team
@@ -61,17 +58,17 @@ export async function POST(req: Request) {
             },
           },
         },
-      })
+      });
 
       // Check if user is already part of a team (from invite acceptance)
-      const isExistingTeamMember = user && user.teamMemberships.length > 0
+      const isExistingTeamMember = user && user.teamMemberships.length > 0;
 
       if (!user) {
         // Create user if doesn't exist
         user = await tx.user.create({
           data: {
             clerkId: userId,
-            email: clerkUser.emailAddresses[0]?.emailAddress || '',
+            email: clerkUser.emailAddresses[0]?.emailAddress || "",
             firstName: clerkUser.firstName || firstName,
             lastName: clerkUser.lastName || lastName,
             name: `${firstName} ${lastName}`,
@@ -80,7 +77,7 @@ export async function POST(req: Request) {
             state: state,
             onboardingComplete: false,
           },
-        })
+        });
       } else {
         // Update user with onboarding data
         user = await tx.user.update({
@@ -93,7 +90,7 @@ export async function POST(req: Request) {
             city: city,
             state: state,
           },
-        })
+        });
       }
 
       // If user is already a team member (from invite), skip team creation
@@ -104,7 +101,7 @@ export async function POST(req: Request) {
           data: {
             onboardingComplete: true,
           },
-        })
+        });
 
         return {
           user,
@@ -112,38 +109,40 @@ export async function POST(req: Request) {
           patientInviteCode: null,
           invites: [],
           skippedTeamCreation: true,
-        }
+        };
       }
 
       // Validate patient info is required for new team creation
       if (!patientName || !patientEmail) {
-        throw new Error('Patient information is required when creating a new care team')
+        throw new Error(
+          "Patient information is required when creating a new care team"
+        );
       }
 
       // Create care team (patient User will be created when they accept invite)
-      const teamName = `${patientName}'s Care Team`
+      const teamName = `${patientName}'s Care Team`;
       const careTeam = await tx.careTeam.create({
         data: {
           name: teamName,
           // Don't set patientId - it will be set when patient accepts invite
         },
-      })
+      });
 
       // Create invite for patient (no User record created yet)
-      const patientInviteCode = randomBytes(16).toString('hex')
+      const patientInviteCode = randomBytes(16).toString("hex");
       const patientMember = await tx.careTeamMember.create({
         data: {
           teamId: careTeam.id,
           userId: null, // Will be set when patient accepts invite
-          teamRole: 'PATIENT',
+          teamRole: "PATIENT",
           isAdmin: false,
-          accessLevel: 'FULL',
+          accessLevel: "FULL",
           inviteCode: patientInviteCode,
           inviteEmail: patientEmail,
           invitedName: patientName,
           invitedAt: new Date(),
         },
-      })
+      });
 
       // Add current user as team member (admin)
       await tx.careTeamMember.create({
@@ -152,26 +151,26 @@ export async function POST(req: Request) {
           userId: user.id,
           teamRole: role as any,
           isAdmin: true,
-          accessLevel: 'FULL',
+          accessLevel: "FULL",
         },
-      })
+      });
 
       // Create invites for team members (no User record created - they'll be created when they accept)
-      const invites = []
+      const invites = [];
       for (const member of teamMembers || []) {
-        if (!member.email) continue
+        if (!member.email) continue;
 
-        const inviteCode = randomBytes(16).toString('hex')
+        const inviteCode = randomBytes(16).toString("hex");
         // Extract name from email (before @) as a fallback, or use email as name
-        const emailName = member.email.split('@')[0]
-        const invitedName = member.name || emailName || member.email
-        
+        const emailName = member.email.split("@")[0];
+        const invitedName = member.name || emailName || member.email;
+
         invites.push({
           email: member.email,
           inviteCode,
           name: invitedName,
           role: member.role,
-        })
+        });
 
         await tx.careTeamMember.create({
           data: {
@@ -185,14 +184,22 @@ export async function POST(req: Request) {
             invitedName: invitedName,
             invitedAt: new Date(),
           },
-        })
+        });
       }
 
       // Create daily journal routine if journal questions were provided
-      if (journalQuestions && Array.isArray(journalQuestions) && journalQuestions.length > 0) {
-        const today = new Date()
-        const startDate = new Date(today.getFullYear(), today.getMonth(), today.getDate())
-        
+      if (
+        journalQuestions &&
+        Array.isArray(journalQuestions) &&
+        journalQuestions.length > 0
+      ) {
+        const today = new Date();
+        const startDate = new Date(
+          today.getFullYear(),
+          today.getMonth(),
+          today.getDate()
+        );
+
         await tx.routine.create({
           data: {
             name: "Daily Journal",
@@ -206,13 +213,16 @@ export async function POST(req: Request) {
             endDate: null, // Repeat indefinitely
             isActive: true,
           },
-        })
+        });
 
-        log.info({
-          type: 'onboarding_routine_created',
-          teamId: careTeam.id,
-          questionCount: journalQuestions.length,
-        }, 'Daily journal routine created during onboarding')
+        log.info(
+          {
+            type: "onboarding_routine_created",
+            teamId: careTeam.id,
+            questionCount: journalQuestions.length,
+          },
+          "Daily journal routine created during onboarding"
+        );
       }
 
       // Mark onboarding as complete
@@ -221,7 +231,7 @@ export async function POST(req: Request) {
         data: {
           onboardingComplete: true,
         },
-      })
+      });
 
       return {
         user,
@@ -229,31 +239,31 @@ export async function POST(req: Request) {
         patientInviteCode,
         invites,
         skippedTeamCreation: false,
-      }
-    })
+      };
+    });
 
     // If team creation was skipped (user already in a team), just return success
     if (result.skippedTeamCreation) {
       return NextResponse.json({
         success: true,
-        message: 'Profile updated successfully',
+        message: "Profile updated successfully",
         skippedTeamCreation: true,
-      })
+      });
     }
 
     // Send invite emails (only if we created a new team)
     if (!result.careTeam) {
       return NextResponse.json({
         success: true,
-        message: 'Profile updated successfully',
+        message: "Profile updated successfully",
         skippedTeamCreation: true,
-      })
+      });
     }
 
     // TESTING: Send all invites to lakgarg2002@gmail.com
-    const TEST_EMAIL = 'lakgarg2002@gmail.com'
-    const emailResults = []
-    
+    const TEST_EMAIL = "lakgarg2002@gmail.com";
+    const emailResults = [];
+
     // Send email to patient (testing - send to test email)
     if (result.patientInviteCode) {
       try {
@@ -262,19 +272,33 @@ export async function POST(req: Request) {
           inviteCode: result.patientInviteCode,
           inviterName: `${firstName} ${lastName}`,
           teamName: result.careTeam.name,
-          role: 'PATIENT',
+          role: "PATIENT",
           isPatient: true,
-        })
-        emailResults.push({ 
-          email: patientEmail, 
+        });
+        emailResults.push({
+          email: patientEmail,
           actualEmail: TEST_EMAIL,
           inviteCode: result.patientInviteCode,
-          success: patientEmailResult.success 
-        })
-        log.info({ type: 'onboarding_patient_invite_sent', email: TEST_EMAIL, inviteCode: result.patientInviteCode }, 'Patient invite sent')
+          success: patientEmailResult.success,
+        });
+        log.info(
+          {
+            type: "onboarding_patient_invite_sent",
+            email: TEST_EMAIL,
+            inviteCode: result.patientInviteCode,
+          },
+          "Patient invite sent"
+        );
       } catch (error) {
-        loggerUtils.logError(error, { type: 'onboarding_patient_invite_error', email: patientEmail })
-        emailResults.push({ email: patientEmail, success: false, error: String(error) })
+        loggerUtils.logError(error, {
+          type: "onboarding_patient_invite_error",
+          email: patientEmail,
+        });
+        emailResults.push({
+          email: patientEmail,
+          success: false,
+          error: String(error),
+        });
       }
     }
 
@@ -286,69 +310,97 @@ export async function POST(req: Request) {
           inviteCode: invite.inviteCode,
           inviterName: `${firstName} ${lastName}`,
           teamName: result.careTeam.name,
-          role: invite.role || 'CAREGIVER',
+          role: invite.role || "CAREGIVER",
           isPatient: false,
           invitedName: invite.name || null, // Use the name from the form
-        })
-        emailResults.push({ 
-          email: invite.email, 
+        });
+        emailResults.push({
+          email: invite.email,
           actualEmail: TEST_EMAIL,
           inviteCode: invite.inviteCode,
-          success: emailResult.success 
-        })
-        log.info({ type: 'onboarding_team_invite_sent', email: TEST_EMAIL, inviteCode: invite.inviteCode }, 'Team member invite sent')
+          success: emailResult.success,
+        });
+        log.info(
+          {
+            type: "onboarding_team_invite_sent",
+            email: TEST_EMAIL,
+            inviteCode: invite.inviteCode,
+          },
+          "Team member invite sent"
+        );
       } catch (error) {
-        loggerUtils.logError(error, { type: 'onboarding_team_invite_error', email: invite.email })
-        emailResults.push({ email: invite.email, success: false, error: String(error) })
+        loggerUtils.logError(error, {
+          type: "onboarding_team_invite_error",
+          email: invite.email,
+        });
+        emailResults.push({
+          email: invite.email,
+          success: false,
+          error: String(error),
+        });
       }
     }
 
-    log.info({ type: 'onboarding_email_results', results: emailResults }, 'Email sending completed')
-    
+    log.info(
+      { type: "onboarding_email_results", results: emailResults },
+      "Email sending completed"
+    );
+
     // Collect all invite codes for testing
-    const allInviteCodes: Array<{ code: string; url: string; role: string }> = []
-    
+    const allInviteCodes: Array<{ code: string; url: string; role: string }> =
+      [];
+
+    // Determine app URL for invite links
+    const isProduction =
+      process.env.NODE_ENV === "production" ||
+      process.env.VERCEL_ENV === "production";
+    const appUrl = isProduction
+      ? "https://joincoco.app"
+      : process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+
     // Patient invite
     if (result.patientInviteCode) {
-      const url = `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/accept-invite?code=${result.patientInviteCode}`
+      const url = `${appUrl}/accept-invite?code=${result.patientInviteCode}`;
       allInviteCodes.push({
         code: result.patientInviteCode,
         url,
-        role: 'PATIENT',
-      })
+        role: "PATIENT",
+      });
     }
-    
+
     // Team member invites
     result.invites.forEach((invite: { inviteCode: string; role?: string }) => {
       if (invite.inviteCode) {
-        const url = `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/accept-invite?code=${invite.inviteCode}`
+        const url = `${appUrl}/accept-invite?code=${invite.inviteCode}`;
         allInviteCodes.push({
           code: invite.inviteCode,
           url,
-          role: invite.role || 'TEAM_MEMBER',
-        })
+          role: invite.role || "TEAM_MEMBER",
+        });
       }
-    })
-    
+    });
+
     // Log all invite codes for testing (in development only)
-    if (process.env.NODE_ENV === 'development') {
-      log.info({ type: 'onboarding_invite_codes', codes: allInviteCodes }, 'All invite codes generated')
+    if (process.env.NODE_ENV === "development") {
+      log.info(
+        { type: "onboarding_invite_codes", codes: allInviteCodes },
+        "All invite codes generated"
+      );
     }
 
     return NextResponse.json({
       success: true,
-      message: 'Onboarding completed successfully',
+      message: "Onboarding completed successfully",
       teamId: result.careTeam.id,
       emailsSent: emailResults.filter((r) => r.success).length,
       emailsFailed: emailResults.filter((r) => !r.success).length,
       // Include invite codes in response for testing
       inviteCodes: allInviteCodes,
-    })
+    });
   } catch (error) {
     return createInternalErrorResponse(error, {
       endpoint: "/api/onboarding",
       method: "POST",
-    })
+    });
   }
 }
-
