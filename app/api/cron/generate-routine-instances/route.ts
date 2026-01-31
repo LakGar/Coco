@@ -16,6 +16,7 @@ export async function POST(req: Request) {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
+    const { searchParams } = new URL(req.url);
     // Generate instances for the next 7 days by default
     const daysAhead = parseInt(searchParams.get("daysAhead") || "7");
     const endDate = new Date(today);
