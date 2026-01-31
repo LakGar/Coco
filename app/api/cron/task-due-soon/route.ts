@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { createAndNotify } from "@/lib/notifications";
 import { log, loggerUtils } from "@/lib/logger";
+import { validateCronSecret } from "@/lib/cron-auth";
 import { NotificationType } from "@prisma/client";
 
 const DUE_WINDOW_MS = 60 * 60 * 1000; // 1 hour
@@ -10,18 +11,13 @@ const DEDUP_WINDOW_MS = 2 * 60 * 60 * 1000; // don't re-notify within 2 hours
 /**
  * Cron: notify assignees when a task is due in the next 1 hour.
  * Run every 15–30 min (e.g. every 15 minutes).
- * Secured by CRON_SECRET.
+ * Secured by CRON_SECRET (Vercel: Bearer header; manual: ?secret=).
  */
 export async function POST(req: Request) {
+  const authError = validateCronSecret(req);
+  if (authError) return authError;
+
   try {
-    const { searchParams } = new URL(req.url);
-    const secret = searchParams.get("secret");
-    const expectedSecret = process.env.CRON_SECRET;
-
-    if (expectedSecret && secret !== expectedSecret) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
     const now = new Date();
     const dueBy = new Date(now.getTime() + DUE_WINDOW_MS);
     const dedupSince = new Date(now.getTime() - DEDUP_WINDOW_MS);

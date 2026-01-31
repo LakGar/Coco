@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { sendDigestEmail } from "@/lib/email";
 import { log, loggerUtils } from "@/lib/logger";
+import { validateCronSecret } from "@/lib/cron-auth";
 import { format, startOfDay, endOfDay, subDays } from "date-fns";
 
 const appUrl =
@@ -13,18 +14,13 @@ const appUrl =
 /**
  * Cron: send daily and weekly digest emails to users who have opted in.
  * Run every hour at :00 (e.g. 0 * * * *). Only sends at the user's configured digest time (UTC).
- * Secured by CRON_SECRET.
+ * Secured by CRON_SECRET (Vercel: Bearer header; manual: ?secret=).
  */
 export async function POST(req: Request) {
+  const authError = validateCronSecret(req);
+  if (authError) return authError;
+
   try {
-    const { searchParams } = new URL(req.url);
-    const secret = searchParams.get("secret");
-    const expectedSecret = process.env.CRON_SECRET;
-
-    if (expectedSecret && secret !== expectedSecret) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
     const now = new Date();
     const utcHour = now.getUTCHours();
     const utcMin = now.getUTCMinutes();

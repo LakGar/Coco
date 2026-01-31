@@ -53,9 +53,20 @@ import {
   Info,
   AlertCircle,
   Loader2,
+  CheckCircle2,
+  Pill,
+  Repeat,
+  Scale,
+  FileText,
+  BarChart3,
+  ClipboardList,
+  Clock,
+  Download,
 } from "lucide-react";
 import { toast } from "sonner";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { UserAvatar } from "@/components/user-avatar";
+import { Badge } from "@/components/ui/badge";
+import { Progress } from "@/components/ui/progress";
 
 interface SnapshotData {
   rangeDays: number;
@@ -186,8 +197,47 @@ export default function PatientJourneyPage() {
   const [loadingMore, setLoadingMore] = React.useState(false);
   const [addEntryOpen, setAddEntryOpen] = React.useState(false);
   const [savingSection, setSavingSection] = React.useState<string | null>(null);
+  const [activeNav, setActiveNav] = React.useState<
+    "overview" | "care-plan" | "timeline"
+  >("overview");
   const chartRefs = React.useRef<Record<string, HTMLDivElement | null>>({});
+  const overviewRef = React.useRef<HTMLDivElement | null>(null);
   const carePlanSectionRef = React.useRef<HTMLDivElement | null>(null);
+  const timelineRef = React.useRef<HTMLDivElement | null>(null);
+
+  const scrollToSection = (section: "overview" | "care-plan" | "timeline") => {
+    setActiveNav(section);
+    const el =
+      section === "overview"
+        ? overviewRef.current
+        : section === "care-plan"
+          ? carePlanSectionRef.current
+          : timelineRef.current;
+    el?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+
+  // Update active nav when user scrolls (scroll spy)
+  React.useEffect(() => {
+    const container = document.querySelector("[data-patient-journey-scroll]");
+    if (!container) return;
+    const refs = [
+      { key: "overview" as const, ref: overviewRef.current },
+      { key: "care-plan" as const, ref: carePlanSectionRef.current },
+      { key: "timeline" as const, ref: timelineRef.current },
+    ].filter((r) => r.ref);
+    const observer = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          if (!entry.isIntersecting) continue;
+          const key = refs.find((r) => r.ref === entry.target)?.key;
+          if (key) setActiveNav(key);
+        }
+      },
+      { root: container, rootMargin: "-20% 0px -60% 0px", threshold: 0 },
+    );
+    refs.forEach(({ ref }) => ref && observer.observe(ref));
+    return () => observer.disconnect();
+  }, [journey]);
 
   const hasCarePlanMetadata = React.useMemo(() => {
     if (!journey?.sections?.length) return false;
@@ -315,56 +365,121 @@ export default function PatientJourneyPage() {
       ? entries.items
       : entries.items.filter((e) => e.type === entryFilter);
 
+  const carePlanFilled = journey.sections.filter((s) =>
+    sectionHasContent(s.content),
+  ).length;
+  const carePlanTotal = journey.sections.length;
+  const carePlanProgress =
+    carePlanTotal > 0 ? Math.round((carePlanFilled / carePlanTotal) * 100) : 0;
+
   return (
     <div className="flex flex-col h-full overflow-hidden w-full">
+      {/* Sticky header: title + section nav + export */}
       <div className="shrink-0 border-b bg-background w-full sticky top-0 z-50">
-        <div className="px-4 py-4 flex flex-wrap items-center justify-between gap-2">
-          <div>
-            <h1 className="text-2xl md:text-3xl font-bold truncate flex items-center gap-2">
-              <Compass className="h-8 w-8 text-muted-foreground" />
-              Patient Journey
-            </h1>
-            <p className="text-sm text-muted-foreground truncate mt-1">
-              {journey.patientDisplayName ||
-                activeTeam.patientName ||
-                activeTeam.name}
-            </p>
+        <div className="px-4 py-3">
+          <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
+            <div>
+              <h1 className="text-2xl md:text-3xl font-bold truncate flex items-center gap-2">
+                <Compass className="h-8 w-8 text-muted-foreground" />
+                Patient Journey
+              </h1>
+              <p className="text-sm text-muted-foreground truncate mt-0.5">
+                {journey.patientDisplayName ||
+                  activeTeam.patientName ||
+                  activeTeam.name}
+              </p>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              className="shrink-0"
+              onClick={async () => {
+                try {
+                  const res = await fetch(
+                    `/api/teams/${activeTeam.id}/journey/export?rangeDays=30`,
+                  );
+                  if (!res.ok) throw new Error("Export failed");
+                  const blob = await res.blob();
+                  const disposition = res.headers.get("Content-Disposition");
+                  const filename =
+                    disposition?.match(/filename="([^"]+)"/)?.[1] ??
+                    `patient-journey-30d-${new Date().toISOString().slice(0, 10)}.json`;
+                  const a = document.createElement("a");
+                  a.href = URL.createObjectURL(blob);
+                  a.download = filename;
+                  a.click();
+                  URL.revokeObjectURL(a.href);
+                  toast.success("Journey exported");
+                } catch (e) {
+                  toast.error("Failed to export");
+                }
+              }}
+            >
+              <Download className="h-4 w-4 mr-1.5" />
+              Export
+            </Button>
           </div>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={async () => {
-              try {
-                const res = await fetch(
-                  `/api/teams/${activeTeam.id}/journey/export?rangeDays=30`,
-                );
-                if (!res.ok) throw new Error("Export failed");
-                const blob = await res.blob();
-                const disposition = res.headers.get("Content-Disposition");
-                const filename =
-                  disposition?.match(/filename="([^"]+)"/)?.[1] ??
-                  `patient-journey-30d-${new Date().toISOString().slice(0, 10)}.json`;
-                const a = document.createElement("a");
-                a.href = URL.createObjectURL(blob);
-                a.download = filename;
-                a.click();
-                URL.revokeObjectURL(a.href);
-                toast.success("Journey exported");
-              } catch (e) {
-                toast.error("Failed to export");
-              }
-            }}
-          >
-            Export 30-day journey
-          </Button>
+          {/* Section nav */}
+          <nav className="flex flex-wrap items-center gap-1 rounded-lg border bg-muted/30 p-1">
+            <Button
+              variant={activeNav === "overview" ? "secondary" : "ghost"}
+              size="sm"
+              className="gap-1.5"
+              onClick={() => scrollToSection("overview")}
+            >
+              <BarChart3 className="h-4 w-4" />
+              Overview
+            </Button>
+            <Button
+              variant={activeNav === "care-plan" ? "secondary" : "ghost"}
+              size="sm"
+              className="gap-1.5"
+              onClick={() => scrollToSection("care-plan")}
+            >
+              <ClipboardList className="h-4 w-4" />
+              Care plan
+              {carePlanTotal > 0 && (
+                <Badge
+                  variant="secondary"
+                  className="ml-0.5 h-5 px-1.5 text-[10px]"
+                >
+                  {carePlanFilled}/{carePlanTotal}
+                </Badge>
+              )}
+            </Button>
+            <Button
+              variant={activeNav === "timeline" ? "secondary" : "ghost"}
+              size="sm"
+              className="gap-1.5"
+              onClick={() => scrollToSection("timeline")}
+            >
+              <Clock className="h-4 w-4" />
+              Timeline
+              {entries.items.length > 0 && (
+                <Badge
+                  variant="secondary"
+                  className="ml-0.5 h-5 px-1.5 text-[10px]"
+                >
+                  {entries.items.length}
+                </Badge>
+              )}
+            </Button>
+          </nav>
         </div>
       </div>
 
-      <div className="flex-1 overflow-auto p-4 space-y-6 max-w-5xl mx-auto w-full">
-        {/* Snapshot: toggle + stat cards + highlights + charts */}
-        <section>
+      <div
+        className="flex-1 overflow-auto p-4 space-y-8 max-w-5xl mx-auto w-full"
+        data-patient-journey-scroll
+      >
+        {/* Overview: time range + stats + highlights + charts */}
+        <section id="overview" ref={overviewRef} className="scroll-mt-4">
           <div className="flex items-center justify-between gap-4 mb-4">
-            <div className="flex rounded-lg border p-1">
+            <h2 className="text-lg font-semibold flex items-center gap-2">
+              <BarChart3 className="h-5 w-5 text-muted-foreground" />
+              Overview
+            </h2>
+            <div className="flex rounded-lg border p-1 bg-muted/20">
               <Button
                 variant={rangeDays === 7 ? "secondary" : "ghost"}
                 size="sm"
@@ -384,61 +499,109 @@ export default function PatientJourneyPage() {
 
           {data && (
             <>
-              <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-3 mb-4">
-                <Card>
-                  <CardContent className="p-3">
-                    <p className="text-xs text-muted-foreground">Completed</p>
-                    <p className="text-xl font-bold">
-                      {data.totals.tasksCompleted}
-                    </p>
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-5">
+                <Card className="overflow-hidden">
+                  <CardContent className="p-3 flex items-start gap-3">
+                    <div className="rounded-lg bg-primary/10 p-2">
+                      <CheckCircle2 className="h-4 w-4 text-primary" />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-xs text-muted-foreground">Completed</p>
+                      <p className="text-xl font-bold tabular-nums">
+                        {data.totals.tasksCompleted}
+                      </p>
+                    </div>
                   </CardContent>
                 </Card>
-                <Card>
-                  <CardContent className="p-3">
-                    <p className="text-xs text-muted-foreground">Overdue</p>
-                    <p className="text-xl font-bold">
-                      {data.totals.tasksOverdue}
-                    </p>
+                <Card
+                  className={
+                    data.totals.tasksOverdue > 0
+                      ? "overflow-hidden border-destructive/50 bg-destructive/5"
+                      : "overflow-hidden"
+                  }
+                >
+                  <CardContent className="p-3 flex items-start gap-3">
+                    <div
+                      className={
+                        data.totals.tasksOverdue > 0
+                          ? "rounded-lg bg-destructive/20 p-2"
+                          : "rounded-lg bg-muted p-2"
+                      }
+                    >
+                      <AlertCircle
+                        className={
+                          data.totals.tasksOverdue > 0
+                            ? "h-4 w-4 text-destructive"
+                            : "h-4 w-4 text-muted-foreground"
+                        }
+                      />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-xs text-muted-foreground">Overdue</p>
+                      <p className="text-xl font-bold tabular-nums">
+                        {data.totals.tasksOverdue}
+                      </p>
+                    </div>
                   </CardContent>
                 </Card>
-                <Card>
-                  <CardContent className="p-3">
-                    <p className="text-xs text-muted-foreground">
-                      Med adherence
-                    </p>
-                    <p className="text-xl font-bold">
-                      {data.totals.medicationAdherencePercent != null
-                        ? `${data.totals.medicationAdherencePercent}%`
-                        : "—"}
-                    </p>
+                <Card className="overflow-hidden">
+                  <CardContent className="p-3 flex items-start gap-3">
+                    <div className="rounded-lg bg-muted p-2">
+                      <Pill className="h-4 w-4 text-muted-foreground" />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-xs text-muted-foreground">
+                        Med adherence
+                      </p>
+                      <p className="text-xl font-bold tabular-nums">
+                        {data.totals.medicationAdherencePercent != null
+                          ? `${data.totals.medicationAdherencePercent}%`
+                          : "—"}
+                      </p>
+                    </div>
                   </CardContent>
                 </Card>
-                <Card>
-                  <CardContent className="p-3">
-                    <p className="text-xs text-muted-foreground">Routine %</p>
-                    <p className="text-xl font-bold">
-                      {data.totals.routineCompletionPercent != null
-                        ? `${data.totals.routineCompletionPercent}%`
-                        : "—"}
-                    </p>
+                <Card className="overflow-hidden">
+                  <CardContent className="p-3 flex items-start gap-3">
+                    <div className="rounded-lg bg-muted p-2">
+                      <Repeat className="h-4 w-4 text-muted-foreground" />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-xs text-muted-foreground">Routine %</p>
+                      <p className="text-xl font-bold tabular-nums">
+                        {data.totals.routineCompletionPercent != null
+                          ? `${data.totals.routineCompletionPercent}%`
+                          : "—"}
+                      </p>
+                    </div>
                   </CardContent>
                 </Card>
-                <Card>
-                  <CardContent className="p-3">
-                    <p className="text-xs text-muted-foreground">
-                      Burden score
-                    </p>
-                    <p className="text-xl font-bold">
-                      {data.totals.burdenLastScore ?? "—"}
-                    </p>
+                <Card className="overflow-hidden">
+                  <CardContent className="p-3 flex items-start gap-3">
+                    <div className="rounded-lg bg-muted p-2">
+                      <Scale className="h-4 w-4 text-muted-foreground" />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-xs text-muted-foreground">
+                        Burden score
+                      </p>
+                      <p className="text-xl font-bold tabular-nums">
+                        {data.totals.burdenLastScore ?? "—"}
+                      </p>
+                    </div>
                   </CardContent>
                 </Card>
-                <Card>
-                  <CardContent className="p-3">
-                    <p className="text-xs text-muted-foreground">Notes</p>
-                    <p className="text-xl font-bold">
-                      {data.totals.notesCreated}
-                    </p>
+                <Card className="overflow-hidden">
+                  <CardContent className="p-3 flex items-start gap-3">
+                    <div className="rounded-lg bg-muted p-2">
+                      <FileText className="h-4 w-4 text-muted-foreground" />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-xs text-muted-foreground">Notes</p>
+                      <p className="text-xl font-bold tabular-nums">
+                        {data.totals.notesCreated}
+                      </p>
+                    </div>
                   </CardContent>
                 </Card>
               </div>
@@ -688,8 +851,25 @@ export default function PatientJourneyPage() {
         </section>
 
         {/* Care plan sections */}
-        <section ref={carePlanSectionRef}>
-          <h2 className="text-lg font-semibold mb-3">Care plan sections</h2>
+        <section
+          id="care-plan"
+          ref={carePlanSectionRef}
+          className="scroll-mt-4"
+        >
+          <div className="flex items-center justify-between gap-4 mb-3">
+            <h2 className="text-lg font-semibold flex items-center gap-2">
+              <ClipboardList className="h-5 w-5 text-muted-foreground" />
+              Care plan
+            </h2>
+            {carePlanTotal > 0 && (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Progress value={carePlanProgress} className="h-2 w-24" />
+                <span className="tabular-nums">
+                  {carePlanFilled} of {carePlanTotal} sections
+                </span>
+              </div>
+            )}
+          </div>
           {(!hasCarePlanMetadata || emptySectionCount > 0) && (
             <Card className="mb-4 border-amber-200 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-950/20">
               <CardContent className="p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
@@ -739,89 +919,113 @@ export default function PatientJourneyPage() {
         </section>
 
         {/* Timeline */}
-        <section>
+        <section id="timeline" ref={timelineRef} className="scroll-mt-4">
           <div className="flex items-center justify-between gap-4 mb-3">
-            <h2 className="text-lg font-semibold">Timeline</h2>
+            <h2 className="text-lg font-semibold flex items-center gap-2">
+              <Clock className="h-5 w-5 text-muted-foreground" />
+              Timeline
+            </h2>
             {canEdit && (
               <Button size="sm" onClick={() => setAddEntryOpen(true)}>
-                <Plus className="h-4 w-4 mr-1" />
+                <Plus className="h-4 w-4 mr-1.5" />
                 Add entry
               </Button>
             )}
           </div>
-          <div className="flex flex-wrap gap-2 mb-3">
-            <Button
-              variant={entryFilter === "all" ? "secondary" : "outline"}
-              size="sm"
+          <p className="text-sm text-muted-foreground mb-3">
+            Filter by type to focus on updates, milestones, or events.
+          </p>
+          <div className="flex flex-wrap gap-2 mb-4">
+            <Badge
+              variant={entryFilter === "all" ? "default" : "outline"}
+              className="cursor-pointer py-1.5 px-3 text-xs font-medium"
               onClick={() => setEntryFilter("all")}
             >
               All
-            </Button>
+            </Badge>
             {Object.entries(ENTRY_TYPE_LABELS).map(([type, label]) => (
-              <Button
+              <Badge
                 key={type}
-                variant={entryFilter === type ? "secondary" : "outline"}
-                size="sm"
+                variant={entryFilter === type ? "default" : "outline"}
+                className="cursor-pointer py-1.5 px-3 text-xs font-medium"
                 onClick={() => setEntryFilter(type)}
               >
                 {label}
-              </Button>
+              </Badge>
             ))}
           </div>
-          <ul className="space-y-2">
+          <ul className="space-y-0">
             {filteredEntries.map((entry) => (
-              <li key={entry.id}>
+              <li
+                key={entry.id}
+                className="timeline-item relative flex gap-3 pb-3 last:pb-0 last:[&_.timeline-connector]:hidden"
+              >
+                {/* Timeline dot + connector line */}
+                <div className="flex flex-col items-center shrink-0 pt-1">
+                  <div
+                    className={
+                      !entry.authorId
+                        ? "h-3 w-3 rounded-full border-2 border-muted-foreground/50 bg-muted"
+                        : "h-3 w-3 rounded-full border-2 border-primary bg-background"
+                    }
+                  />
+                  <div className="timeline-connector w-px flex-1 min-h-8 bg-border mt-1" />
+                </div>
                 <Card
                   className={
-                    !entry.authorId
-                      ? "border-l-4 border-l-muted-foreground/50"
-                      : ""
+                    "flex-1 min-w-0 " +
+                    (!entry.authorId
+                      ? "border-l-2 border-l-muted-foreground/50"
+                      : "")
                   }
                 >
-                  <CardContent className="p-4 flex flex-wrap items-center gap-2">
-                    <span className="text-xs font-medium text-muted-foreground">
-                      {ENTRY_TYPE_LABELS[entry.type] ?? entry.type}
-                    </span>
-                    <span className="font-medium">{entry.title}</span>
-                    {entry.author ? (
-                      <span className="text-sm text-muted-foreground flex items-center gap-1.5">
-                        <Avatar className="h-5 w-5 shrink-0">
-                          <AvatarImage
+                  <CardContent className="p-4 flex flex-col sm:flex-row sm:flex-wrap sm:items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <Badge
+                        variant="secondary"
+                        className="text-[10px] font-normal"
+                      >
+                        {ENTRY_TYPE_LABELS[entry.type] ?? entry.type}
+                      </Badge>
+                      <span className="font-medium">{entry.title}</span>
+                    </div>
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground sm:ml-auto flex-wrap">
+                      {entry.author ? (
+                        <span className="flex items-center gap-1.5">
+                          <UserAvatar
                             src={entry.author.imageUrl ?? undefined}
-                          />
-                          <AvatarFallback className="text-[10px] bg-muted text-muted-foreground">
-                            {(entry.author.name || "?")
+                            alt={entry.author.name || "Author"}
+                            fallback={(entry.author.name || "?")
                               .split(/\s+/)
                               .map((n) => n[0])
                               .join("")
                               .toUpperCase()
                               .slice(0, 2)}
-                          </AvatarFallback>
-                        </Avatar>
-                        by {entry.author.name}
-                      </span>
-                    ) : (
-                      <span className="text-xs text-muted-foreground">
-                        (system)
-                      </span>
-                    )}
-                    <span className="text-xs text-muted-foreground ml-auto">
-                      {format(
-                        new Date(entry.occurredAt),
-                        "MMM d, yyyy · h:mm a",
+                            className="h-5 w-5"
+                          />
+                          {entry.author.name}
+                        </span>
+                      ) : (
+                        <span className="text-xs">(system)</span>
                       )}
-                    </span>
+                      <span className="text-xs tabular-nums">
+                        {format(
+                          new Date(entry.occurredAt),
+                          "MMM d, yyyy · h:mm a",
+                        )}
+                      </span>
+                    </div>
                     {entry.linkedEntityId && (
                       <Button
                         variant="link"
                         size="sm"
-                        className="p-0 h-auto"
+                        className="p-0 h-auto text-xs w-full sm:w-auto"
                         asChild
                       >
                         <a
                           href={`/dashboard/tasks?task=${entry.linkedEntityId}`}
                         >
-                          View source
+                          View source →
                         </a>
                       </Button>
                     )}
@@ -925,19 +1129,17 @@ function SectionCard({
             <span className="text-xs text-muted-foreground flex items-center gap-2">
               {section.updatedBy && (
                 <>
-                  <Avatar className="h-5 w-5 shrink-0">
-                    <AvatarImage
-                      src={section.updatedBy.imageUrl ?? undefined}
-                    />
-                    <AvatarFallback className="text-[10px] bg-muted text-muted-foreground">
-                      {(section.updatedBy.name || "?")
-                        .split(/\s+/)
-                        .map((n) => n[0])
-                        .join("")
-                        .toUpperCase()
-                        .slice(0, 2)}
-                    </AvatarFallback>
-                  </Avatar>
+                  <UserAvatar
+                    src={section.updatedBy.imageUrl ?? undefined}
+                    alt={section.updatedBy.name || "User"}
+                    fallback={(section.updatedBy.name || "?")
+                      .split(/\s+/)
+                      .map((n) => n[0])
+                      .join("")
+                      .toUpperCase()
+                      .slice(0, 2)}
+                    className="h-5 w-5"
+                  />
                   <span>
                     Last updated by {section.updatedBy.name} on{" "}
                     {format(new Date(section.updatedAt), "MMM d, yyyy")}

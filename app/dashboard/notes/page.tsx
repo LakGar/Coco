@@ -17,9 +17,11 @@ import {
   Trash2,
   User,
   Users,
+  Smile,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { format } from "date-fns";
+import { UserAvatar } from "@/components/user-avatar";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { toast } from "sonner";
 import { PermissionGuard } from "@/components/permission-guard";
@@ -41,6 +43,36 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
+/** Mood rating display (label + emoji) for notes page */
+const MOOD_DISPLAY: Record<string, { label: string; emoji: string }> = {
+  CALM: { label: "Calm", emoji: "😊" },
+  CONTENT: { label: "Content", emoji: "🙂" },
+  NEUTRAL: { label: "Neutral", emoji: "😐" },
+  RELAXED: { label: "Relaxed", emoji: "😌" },
+  SAD: { label: "Sad", emoji: "😔" },
+  WITHDRAWN: { label: "Withdrawn", emoji: "😶" },
+  TIRED: { label: "Tired", emoji: "😴" },
+  ANXIOUS: { label: "Anxious", emoji: "😟" },
+  IRRITABLE: { label: "Irritable", emoji: "😠" },
+  RESTLESS: { label: "Restless", emoji: "😣" },
+  CONFUSED: { label: "Confused", emoji: "😕" },
+};
+
+interface MoodEntry {
+  id: string;
+  rating: string;
+  notes: string | null;
+  observedAt: string;
+  loggedBy: {
+    id: string;
+    name: string | null;
+    firstName: string | null;
+    lastName: string | null;
+    email?: string;
+    imageUrl?: string | null;
+  };
+}
+
 export default function NotesPage() {
   const { activeTeam } = useTeamStore();
   const {
@@ -60,6 +92,7 @@ export default function NotesPage() {
   const [formOpen, setFormOpen] = React.useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = React.useState(false);
   const [noteToDelete, setNoteToDelete] = React.useState<Note | null>(null);
+  const [moods, setMoods] = React.useState<MoodEntry[]>([]);
 
   // Form state
   const [title, setTitle] = React.useState("");
@@ -74,18 +107,26 @@ export default function NotesPage() {
   const shouldReduceMotion = useReducedMotion();
   const shouldAnimate = !shouldReduceMotion;
 
-  // Fetch notes and team data on mount and when team changes
+  // Fetch notes, team data, and moods on mount and when team changes
   React.useEffect(() => {
     if (!activeTeam) return;
 
     const loadData = async () => {
       try {
-        await Promise.all([
+        const [_, __, moodsRes] = await Promise.all([
           fetchNotes(activeTeam.id),
           fetchTeamData(activeTeam.id),
+          fetch(`/api/teams/${activeTeam.id}/moods`),
         ]);
+        if (moodsRes.ok) {
+          const moodList = await moodsRes.json();
+          setMoods(Array.isArray(moodList) ? moodList : []);
+        } else {
+          setMoods([]);
+        }
       } catch (error) {
-        console.error("Error loading notes/team data:", error);
+        console.error("Error loading notes/team data/moods:", error);
+        setMoods([]);
       }
     };
 
@@ -374,6 +415,111 @@ export default function NotesPage() {
             </div>
           </div>
         </div>
+
+        {/* Mood section */}
+        {activeTeam && (
+          <div className="shrink-0 border-b bg-muted/20 px-4 md:px-6 py-4">
+            <div className="max-w-7xl mx-auto">
+              <h2 className="text-sm font-semibold text-muted-foreground flex items-center gap-2 mb-3">
+                <Smile className="h-4 w-4" />
+                Recent mood
+              </h2>
+              {moods.length === 0 ? (
+                <p className="text-sm text-muted-foreground">
+                  No mood entries yet. Track mood from the dashboard.
+                </p>
+              ) : (
+                <div className="flex flex-col sm:flex-row sm:items-stretch gap-4">
+                  {/* Latest mood highlight */}
+                  <Card className="sm:w-56 shrink-0">
+                    <CardContent className="p-4">
+                      <div className="flex items-center gap-3">
+                        <span className="text-3xl" aria-hidden>
+                          {MOOD_DISPLAY[moods[0].rating]?.emoji ?? "😐"}
+                        </span>
+                        <div className="min-w-0">
+                          <p className="font-medium">
+                            {MOOD_DISPLAY[moods[0].rating]?.label ??
+                              moods[0].rating}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            {format(
+                              new Date(moods[0].observedAt),
+                              "MMM d, h:mm a",
+                            )}
+                          </p>
+                          {moods[0].loggedBy && (
+                            <div className="flex items-center gap-1.5 mt-1">
+                              <UserAvatar
+                                src={moods[0].loggedBy.imageUrl ?? undefined}
+                                alt={
+                                  moods[0].loggedBy.name ||
+                                  moods[0].loggedBy.firstName ||
+                                  "User"
+                                }
+                                fallback={(
+                                  moods[0].loggedBy.name ||
+                                  moods[0].loggedBy.firstName ||
+                                  "?"
+                                )
+                                  .split(/\s+/)
+                                  .map((n) => n[0])
+                                  .join("")
+                                  .toUpperCase()
+                                  .slice(0, 2)}
+                                className="h-5 w-5"
+                              />
+                              <span className="text-xs text-muted-foreground truncate">
+                                {moods[0].loggedBy.name ??
+                                  [
+                                    moods[0].loggedBy.firstName,
+                                    moods[0].loggedBy.lastName,
+                                  ]
+                                    .filter(Boolean)
+                                    .join(" ") ??
+                                  "Unknown"}
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                      {moods[0].notes && (
+                        <p className="text-xs text-muted-foreground mt-2 line-clamp-2 border-t pt-2">
+                          {moods[0].notes}
+                        </p>
+                      )}
+                    </CardContent>
+                  </Card>
+                  {/* Recent mood list (next 9 after latest) */}
+                  <div className="flex-1 min-w-0 overflow-auto">
+                    <ul className="flex gap-2 overflow-x-auto pb-1 sm:flex-wrap sm:overflow-visible sm:gap-2">
+                      {moods.slice(1, 10).map((m) => (
+                        <li key={m.id}>
+                          <Card className="inline-flex items-center gap-2 px-3 py-2 shrink-0 sm:shrink-0 w-auto">
+                            <span className="text-lg" aria-hidden>
+                              {MOOD_DISPLAY[m.rating]?.emoji ?? "😐"}
+                            </span>
+                            <div className="min-w-0">
+                              <p className="text-sm font-medium leading-tight">
+                                {MOOD_DISPLAY[m.rating]?.label ?? m.rating}
+                              </p>
+                              <p className="text-[10px] text-muted-foreground">
+                                {format(
+                                  new Date(m.observedAt),
+                                  "MMM d, h:mm a",
+                                )}
+                              </p>
+                            </div>
+                          </Card>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Notes List */}
         <div className="flex-1 overflow-auto w-full p-4 md:p-6">
