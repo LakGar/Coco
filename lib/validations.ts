@@ -242,12 +242,12 @@ export async function validateRequest<T>(
 export function formatZodError(error: unknown): { message: string; issues: Array<{ path: string[]; message: string }> } {
   // Type guard: check if it's a ZodError
   if (error instanceof z.ZodError) {
-    // Safety check: ensure error.errors exists and is an array
-    if (error.errors && Array.isArray(error.errors)) {
+    // Safety check: ensure error.issues exists and is an array
+    if (error.issues && Array.isArray(error.issues)) {
       return {
         message: "Validation failed",
-        issues: error.errors.map((err) => ({
-          path: err.path,
+        issues: error.issues.map((err) => ({
+          path: err.path.map(String),
           message: err.message,
         })),
       }

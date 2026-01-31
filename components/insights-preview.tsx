@@ -32,9 +32,7 @@ export function InsightsPreview({ insights }: InsightsPreviewProps) {
     return null
   }
 
-  const Icon = insight.icon
-    ? (insight.icon as React.ComponentType<{ className?: string }>)
-    : INSIGHT_ICONS[insight.type] || Lightbulb
+  const Icon = INSIGHT_ICONS[insight.type] || Lightbulb
 
   return (
     <motion.div
@@ -46,7 +44,11 @@ export function InsightsPreview({ insights }: InsightsPreviewProps) {
         <CardContent className="p-5">
           <div className="flex items-start gap-3">
             <div className="shrink-0 p-2 rounded-lg bg-muted/30">
-              <Icon className="h-4 w-4 text-muted-foreground" />
+              {insight.icon ? (
+                <div className="h-4 w-4 text-muted-foreground">{insight.icon}</div>
+              ) : (
+                <Icon className="h-4 w-4 text-muted-foreground" />
+              )}
             </div>
             <div className="flex-1 min-w-0">
               <h3 className="text-xs font-medium text-muted-foreground mb-1 uppercase tracking-wider">

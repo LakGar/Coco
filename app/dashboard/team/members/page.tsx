@@ -26,6 +26,7 @@ import {
 } from "@/components/ui/select"
 import { toast } from "sonner"
 import { Users, Mail, UserPlus } from "lucide-react"
+import { TeamMemberCard } from "@/components/ui/team-member-card"
 
 interface TeamMember {
   id: string

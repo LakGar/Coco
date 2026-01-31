@@ -66,17 +66,22 @@ export async function POST(req: Request) {
     })
 
     let instancesCreated = 0
-    let tasksCreated = 0
     const errors: string[] = []
 
     for (const routine of activeRoutines) {
       try {
+        // Infer recurrence type from days of week
+        // If all 7 days are included, it's DAILY; otherwise it's WEEKLY
+        const recurrenceType = routine.recurrenceDaysOfWeek.length === 7 
+          ? 'DAILY' 
+          : 'WEEKLY'
+        
         // Generate dates for this routine based on recurrence pattern
         const dates = generateRecurrenceDates(
-          routine.recurrenceType,
+          recurrenceType,
           routine.recurrenceDaysOfWeek,
-          routine.recurrenceDayOfMonth,
-          routine.recurrenceSpecificDates,
+          null, // recurrenceDayOfMonth - not in schema
+          [], // recurrenceSpecificDates - not in schema
           routine.startDate,
           routine.endDate,
           today,
@@ -87,9 +92,9 @@ export async function POST(req: Request) {
           // Check if instance already exists
           const existingInstance = await prisma.routineInstance.findUnique({
             where: {
-              routineId_scheduledDate: {
+              routineId_entryDate: {
                 routineId: routine.id,
-                scheduledDate: date,
+                entryDate: date,
               },
             },
           })
@@ -102,43 +107,14 @@ export async function POST(req: Request) {
           const instance = await prisma.routineInstance.create({
             data: {
               routineId: routine.id,
-              scheduledDate: date,
-              isCompleted: false,
+              entryDate: date,
             },
           })
 
           instancesCreated++
-
-          // Generate task if auto-generate is enabled
-          if (routine.autoGenerateTasks) {
-            // Determine due date/time
-            let dueDate = new Date(date)
-            if (routine.timeOfDay) {
-              const [hours, minutes] = routine.timeOfDay.split(':').map(Number)
-              dueDate.setHours(hours, minutes, 0, 0)
-            } else {
-              // Default to end of day
-              dueDate.setHours(23, 59, 59, 999)
-            }
-
-            // Create task
-            const task = await prisma.task.create({
-              data: {
-                name: routine.name,
-                description: routine.description,
-                teamId: routine.teamId,
-                createdById: routine.createdById,
-                assignedToId: routine.assignedToId,
-                priority: routine.priority,
-                status: 'TODO',
-                dueDate: dueDate,
-                routineId: routine.id,
-                routineInstanceId: instance.id,
-              },
-            })
-
-            tasksCreated++
-          }
+          
+          // Note: Task generation from routines is not currently implemented
+          // as the required fields (autoGenerateTasks, timeOfDay, etc.) are not in the schema
         }
       } catch (error) {
         const errorMessage = `Error processing routine ${routine.id}: ${error instanceof Error ? error.message : String(error)}`
@@ -149,9 +125,8 @@ export async function POST(req: Request) {
 
     return NextResponse.json({
       success: true,
-      message: `Generated ${instancesCreated} instances and ${tasksCreated} tasks`,
+      message: `Generated ${instancesCreated} routine instances`,
       instancesCreated,
-      tasksCreated,
       routinesProcessed: activeRoutines.length,
       errors: errors.length > 0 ? errors : undefined,
     })

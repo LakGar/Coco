@@ -18,6 +18,13 @@ export async function POST() {
 
     const { userId } = await auth()
 
+    if (!userId) {
+      return createNotFoundErrorResponse("User ID not found", {
+        endpoint: "/api/sync-user",
+        method: "POST",
+      })
+    }
+
     // Get full user data from Clerk
     const clerkUser = await currentUser()
 
