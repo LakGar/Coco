@@ -1,107 +1,259 @@
-"use client";
-import { FlickeringGrid, useMediaQuery, Icons } from "@/components/ui/flickering-footer";
-import { ChevronRightIcon } from "@radix-ui/react-icons";
-import Image from "next/image";
-import Link from "next/link";
+import Link from 'next/link'
+import { Button } from '../ui/button'
+import { Logo } from '@/components/logo'
+import {
+  FacebookIcon,
+  InstagramIcon,
+  MoveRightIcon,
+  TwitterIcon,
+  YoutubeIcon,
+} from 'lucide-react'
+import {
+  Dialog,
+  DialogTrigger,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+  DialogClose,
+} from '../ui/dialog'
+import { Field, FieldGroup } from '../ui/field'
+import { Input } from '../ui/input'
+import { Label } from '../ui/label'
+import { Textarea } from '../ui/textarea'
 
-const footerLinks = [
-  {
-    title: "Product",
-    links: [
-      { id: 1, title: "How it works", url: "/#demo" },
-      { id: 2, title: "Pricing", url: "/pricing" },
-      { id: 3, title: "FAQ", url: "/faq" },
-    ],
-  },
-  {
-    title: "Company",
-    links: [
-      { id: 4, title: "About", url: "/about" },
-      { id: 5, title: "Team", url: "/team" },
-      { id: 6, title: "Contact", url: "mailto:support@coco.app" },
-    ],
-  },
-  {
-    title: "Resources",
-    links: [
-      { id: 7, title: "Community", url: "/#waitlist" },
-      { id: 8, title: "Support", url: "mailto:support@coco.app" },
-    ],
-  },
-];
-
-export default function Footer() {
-  const tablet = useMediaQuery("(max-width: 1024px)");
-
+const Footer = () => {
   return (
-    <footer id="footer" className="w-full pb-0 bg-background">
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between p-10">
-        <div className="flex flex-col items-start justify-start gap-y-5 max-w-xs mx-0">
-          <Link href="/" className="flex items-center gap-2">
-            <div className="relative w-8 h-8">
-              <Image
-                src="/logo.png"
-                alt="COCO Logo"
-                fill
-                className="object-contain"
-              />
-            </div>
-            <p className="text-xl font-light text-primary font-serif tracking-wider">
-              COCO
-            </p>
-          </Link>
-          <p className="tracking-tight text-muted-foreground font-medium">
-            When moments feel overwhelming, we help you find the patterns that bring peace. Caring for someone you love shouldn&apos;t mean carrying everything alone.
-          </p>
-          <div className="flex items-center gap-2 dark:hidden">
-            <Icons.soc2 className="size-12" />
-            <Icons.hipaa className="size-12" />
-            <Icons.gdpr className="size-12" />
-          </div>
-          <div className="dark:flex items-center gap-2 hidden">
-            <Icons.soc2Dark className="size-12" />
-            <Icons.hipaaDark className="size-12" />
-            <Icons.gdprDark className="size-12" />
-          </div>
-        </div>
-        <div className="pt-5 md:w-1/2">
-          <div className="flex flex-col items-start justify-start md:flex-row md:items-center md:justify-between gap-y-5 lg:pl-10">
-            {footerLinks.map((column, columnIndex) => (
-              <ul key={columnIndex} className="flex flex-col gap-y-2">
-                <li className="mb-2 text-sm font-semibold text-primary">
-                  {column.title}
-                </li>
-                {column.links.map((link) => (
-                  <li
-                    key={link.id}
-                    className="group inline-flex cursor-pointer items-center justify-start gap-1 text-[15px]/snug text-muted-foreground"
-                  >
-                    <Link href={link.url}>{link.title}</Link>
-                    <div className="flex size-4 items-center justify-center border border-border rounded translate-x-0 transform opacity-0 transition-all duration-300 ease-out group-hover:translate-x-1 group-hover:opacity-100">
-                      <ChevronRightIcon className="h-4 w-4" />
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            ))}
-          </div>
-        </div>
-      </div>
-      <div className="w-full h-48 md:h-64 relative mt-24 z-0">
-        <div className="absolute inset-0 bg-gradient-to-t from-transparent to-background z-10 from-40%" />
-        <div className="absolute inset-0 mx-6">
-          <FlickeringGrid
-            text={tablet ? "COCO" : "Care together"}
-            fontSize={tablet ? 70 : 90}
-            className="h-full w-full"
-            squareSize={2}
-            gridGap={tablet ? 2 : 3}
-            color="#6B7280"
-            maxOpacity={0.3}
-            flickerChance={0.1}
+    <div className="w-screen flex flex-col gap-4 justify-center items-center z-10 relative bg-primary-foreground p-4">
+      <div className="w-full p-4 bg-[#FAE6b9] rounded-xl">
+        <div className="w-full p-4 rounded-xl relative h-[500px] overflow-hidden flex flex-col gap-2">
+          <video
+            src="/videos/landing/footer.mp4"
+            autoPlay
+            muted
+            loop
+            playsInline
+            className="absolute inset-0 w-full h-full object-cover"
           />
+          <div className="relative z-10 flex flex-col gap-2">
+            <h1 className="text-white text-4xl font-bold drop-shadow-md w-[250px]">
+              Ready to join the Family?
+            </h1>
+            <Button className="w-fit cursor-pointer rounded-full px-4 bg-white text-primary md:text-lg md:p-6 hover:bg-primary hover:text-white transition-all duration-300">
+              Get Started <MoveRightIcon className="w-4 h-4" />
+            </Button>
+            <Button
+              className="w-fit cursor-pointer rounded-full px-4 py-2 md:text-lg md:p-6 md:py-5 bg-white/10 backdrop-blur-sm text-white border border-white"
+              variant="outline"
+            >
+              Subscribe
+            </Button>
+          </div>
+        </div>
+        {/* Links section — stacks on mobile, row on desktop */}
+        <div className="w-full flex flex-col sm:flex-row sm:justify-between sm:items-start gap-8 sm:gap-6 pt-4 border-t border-primary/10">
+          <div>
+            <p className="text-primary font-secondary font-light text-[10px] uppercase tracking-wider mb-3">
+              Contact
+            </p>
+
+            <a
+              href="tel:+14084558736"
+              className="block text-primary text-sm font-light hover:underline"
+            >
+              +1 (408) 455-8736
+            </a>
+            <a
+              href="mailto:staff@joincoco.app"
+              className="block text-primary text-sm font-light mt-2 hover:underline"
+            >
+              staff@joincoco.app
+            </a>
+          </div>
+          <div>
+            <p className="text-primary font-secondary font-light text-[10px] uppercase tracking-wider mb-3">
+              Product
+            </p>
+            <nav className="flex flex-col gap-2">
+              <Link
+                href="/#features"
+                className="text-primary text-sm font-semibold hover:underline w-fit"
+              >
+                Features
+              </Link>
+              <Link
+                href="/#pricing"
+                className="text-primary text-sm font-semibold hover:underline w-fit"
+              >
+                Pricing
+              </Link>
+              <Link
+                href="/#faq"
+                className="text-primary text-sm font-semibold hover:underline w-fit"
+              >
+                FAQ
+              </Link>
+            </nav>
+          </div>
+          <div>
+            <p className="text-primary font-secondary font-light text-[10px] uppercase tracking-wider mb-3">
+              Company
+            </p>
+            <nav className="flex flex-col gap-2">
+              <Link
+                href="/about"
+                className="text-primary text-sm font-semibold hover:underline w-fit"
+              >
+                About
+              </Link>
+              <Link
+                href="/blog"
+                className="text-primary text-sm font-semibold hover:underline w-fit"
+              >
+                Blog
+              </Link>
+              <Dialog>
+                <form>
+                  <DialogTrigger asChild>
+                    <p className=" cursor-pointer text-primary text-sm font-semibold hover:underline w-fit">
+                      Contact Us
+                    </p>
+                  </DialogTrigger>
+                  <DialogContent className="sm:max-w-sm">
+                    <DialogHeader>
+                      <DialogTitle>Contact Us</DialogTitle>
+                      <DialogDescription>
+                        Contact us for any questions or feedback.
+                      </DialogDescription>
+                    </DialogHeader>
+                    <FieldGroup>
+                      <div className="flex justify-between items-center gap-2">
+                        <Field>
+                          <Label htmlFor="name-1">First Name</Label>
+                          <Input
+                            id="firstName-1"
+                            name="firstName"
+                            placeholder="John"
+                          />
+                        </Field>
+                        <Field>
+                          <Label htmlFor="lastName-1">Last Name</Label>
+                          <Input
+                            id="lastName-1"
+                            name="lastName"
+                            placeholder="Doe"
+                          />
+                        </Field>
+                      </div>
+
+                      <Field>
+                        <Label htmlFor="username-1">Email</Label>
+                        <Input
+                          id="email-1"
+                          name="email"
+                          placeholder="example@example.com"
+                        />
+                      </Field>
+                      <Field>
+                        <Label htmlFor="message-1">Message</Label>
+                        <Textarea
+                          id="message-1"
+                          name="message"
+                          placeholder="Your message"
+                        />
+                      </Field>
+                    </FieldGroup>
+                    <DialogFooter>
+                      <DialogClose asChild>
+                        <Button variant="outline">Cancel</Button>
+                      </DialogClose>
+                      <Button type="submit">Submit</Button>
+                    </DialogFooter>
+                  </DialogContent>
+                </form>
+              </Dialog>
+            </nav>
+          </div>
+          <div>
+            <p className="text-primary font-secondary font-light text-[10px] uppercase tracking-wider mb-3">
+              Legal
+            </p>
+            <nav className="flex flex-col gap-2">
+              <Link
+                href="/privacy"
+                className="text-primary text-sm font-semibold hover:underline w-fit"
+              >
+                Privacy
+              </Link>
+              <Link
+                href="/terms"
+                className="text-primary text-sm font-semibold hover:underline w-fit"
+              >
+                Terms
+              </Link>
+            </nav>
+          </div>
+        </div>
+
+        <div className="w-full flex flex-col md:flex-row justify-between items-left md:items-center pt-4 gap-4 md:gap-0">
+          <Link href="/" className="flex gap-2 shrink-0 flex-1">
+            <Logo size={40} className="text-primary" />
+            <span className="text-4xl font-bold text-primary">Coco</span>
+          </Link>
+          <div className="flex justify-left items-left md:items-center gap-2 min-w-[350px]">
+            <a
+              href="https://instagram.com"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-primary/50 hover:text-primary transition-all duration-300 cursor-pointer"
+              aria-label="Instagram"
+            >
+              <InstagramIcon className="w-6 h-6" />
+            </a>
+            <a
+              href="https://twitter.com"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-primary/50 hover:text-primary transition-all duration-300 cursor-pointer"
+              aria-label="Twitter"
+            >
+              <TwitterIcon className="w-6 h-6" />
+            </a>
+            <a
+              href="https://facebook.com"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-primary/50 hover:text-primary transition-all duration-300 cursor-pointer"
+              aria-label="Facebook"
+            >
+              <FacebookIcon className="w-6 h-6" />
+            </a>
+            <a
+              href="https://youtube.com"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-primary/50 hover:text-primary transition-all duration-300 cursor-pointer"
+              aria-label="YouTube"
+            >
+              <YoutubeIcon className="w-6 h-6" />
+            </a>
+          </div>
+          <p className="flex justify-left items-left gap-2 text-xs text-primary/50">
+            Built with ❤️ by{' '}
+            <a
+              href="https://theempowerweb.com"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-primary font-semibold"
+            >
+              TheEmpowerWeb
+            </a>
+          </p>
         </div>
       </div>
-    </footer>
-  );
+    </div>
+  )
 }
+
+export default Footer
