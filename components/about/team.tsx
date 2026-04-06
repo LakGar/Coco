@@ -19,6 +19,17 @@ const Team = () => {
       mainColor: '#90afc2',
       secondaryColor: '#d8e3f1',
     },
+    {
+      name: 'Atira ',
+      role: 'UI/UX',
+      image: '/images/about/atira.png',
+      description:
+        'A product designer specializing in empathetic, human-centered design. With over 4 years of experience building systems that feel intuitive and supportive at the moments that matter most.',
+      mainColor: '#90afc2',
+      secondaryColor: '#d8e3f1',
+    },
+    
+
   ]
   return (
     <div className="w-screen p-4 mx-auto py-20">
